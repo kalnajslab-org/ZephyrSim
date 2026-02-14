@@ -3,15 +3,13 @@
 ZephyrSim_Main.py
 This script simulates the Zephyr communications with a StratoCore system. It sets up the necessary file structure, 
 opens serial ports for communication, and starts the main output window for the ZephyrSim simulator. It also listens for 
-instrument messages over serial and handles command queues.
+instrument messages over serial and handles command responses.
 Modules:
     ZephyrSimGUI
     ZephyrSimProcess
     ZephyrSimUtils
     argparse
     threading
-    serial
-    queue
     os
 Functions:
     FileSetup() -> None:
@@ -20,7 +18,7 @@ Functions:
         Parses command-line arguments.
     main() -> None:
         Main function that initializes the ZephyrSim simulator, sets up file structure, opens serial ports, and starts 
-        the main output window. It also listens for instrument messages and handles command queues.
+        the main output window. It also listens for instrument messages and handles command responses.
 """
 # -*- coding: utf-8 -*-
 
@@ -34,11 +32,10 @@ import ZephyrSimProcess
 import ZephyrSimUtils
 import os
 import argparse
-import xmltodict
 import datetime
 
 # libraries
-import threading, serial, queue, os
+import threading
 
 # globals
 instrument = ''
@@ -91,52 +88,37 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     return args
 
-def msg_to_queue(q: queue.Queue, timestring: str, msg: str) -> None:
-    global xml_queue
-    if msg == None:
-        return
-    # Add tags to make the message XML parsable
-    newmsg = '<XMLTOKEN>' + msg + '</XMLTOKEN>'
-    dict = xmltodict.parse(newmsg)
-    q.put(f'{timestring}  (TO) {dict["XMLTOKEN"]}\n')  
-
 def main() -> None:
     global instrument
 
-    args = parse_args()
-
-    # create queues for instrument messages
-    inst_queue = queue.Queue(maxsize=50)
-    xml_queue = queue.Queue()
-    cmd_queue = queue.Queue()
+    parse_args()
 
     # get configuration
     config = ZephyrSimGUI.ConfigWindow()
 
     # set global variables
     instrument = config['Instrument']
-    auto_ack = config['AutoAck']
 
     # set up the files and structure
     FileSetup(config)
 
     # start the main output window
-    ZephyrSimGUI.MainWindow(config, logport=config['LogPort'], zephyrport=config['ZephyrPort'], cmd_fname=cmd_filename, xmlqueue=xml_queue)
+    ZephyrSimGUI.MainWindow(config, logport=config['LogPort'], zephyrport=config['ZephyrPort'], cmd_fname=cmd_filename)
 
     # Set the tm filename
     ZephyrSimGUI.SetTmDir(tm_dir)
 
     # start listening for instrument messages over serial
     obc_parser_args=(
-        inst_queue,
-        xml_queue,
+        ZephyrSimGUI.EmitLogMessage,
+        ZephyrSimGUI.EmitZephyrMessage,
+        ZephyrSimGUI.EmitCommandMessage,
         config['LogPort'],
         config['ZephyrPort'],
         inst_filename,
         xml_filename,
         tm_dir,
         instrument,
-        cmd_queue,
         config)
     threading.Thread(target=ZephyrSimProcess.ReadInstrument,args=obc_parser_args).start()
 
@@ -149,38 +131,12 @@ def main() -> None:
         # poll the GUI
         ZephyrSimGUI.PollWindowEvents()
 
-        current_time, millis = ZephyrSimUtils.GetTime()
-        timestring = '[' + current_time + '.' + millis + '] '
-
         # send GPS messages every 60 seconds
         now_timestamp = datetime.datetime.now().timestamp()
         if config["AutoGPS"] and now_timestamp - last_gps_timestamp >= 60:
             last_gps_timestamp = now_timestamp
             gps_msg = ZephyrSimUtils.sendGPS(sza, cmd_filename, config['ZephyrPort'])
-            msg_to_queue(xml_queue, timestring, gps_msg)
-
-        # handle instrument queues
-        if not inst_queue.empty():
-            ZephyrSimGUI.AddMsgToLogDisplay(inst_queue.get())
-        if not xml_queue.empty():
-            ZephyrSimGUI.AddMsgToZephyrDisplay(xml_queue.get())
-        if not cmd_queue.empty():
-            cmd = cmd_queue.get()
-            if auto_ack:
-                if 'TMAck' == cmd:
-                    msg = ZephyrSimUtils.sendTMAck(instrument, 'ACK', cmd_filename, config['ZephyrPort'])
-                    msg_to_queue(xml_queue, timestring, msg)
-                    ZephyrSimGUI.AddDebugMsg(timestring + 'Sent TMAck')
-                elif 'SAck' == cmd:
-                    msg = ZephyrSimUtils.sendSAck(config['Instrument'], 'ACK', cmd_filename, config['ZephyrPort'])
-                    msg_to_queue(xml_queue, timestring, msg)
-                    ZephyrSimGUI.AddDebugMsg(timestring + 'Sent SAck')
-                elif 'RAAck' == cmd:
-                    msg = ZephyrSimUtils.sendRAAck(instrument, 'ACK', cmd_filename, config['ZephyrPort'])
-                    msg_to_queue(xml_queue, timestring, msg)
-                    ZephyrSimGUI.AddDebugMsg(timestring + 'Sent RAAck')
-                else:
-                    ZephyrSimGUI.AddDebugMsg('Unknown command', True)
+            ZephyrSimGUI.AddMsgToXmlQueue(gps_msg)
 
 if (__name__ == '__main__'):
     main()

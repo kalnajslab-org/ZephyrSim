@@ -17,7 +17,6 @@ import ast
 import configparser
 import json
 import os
-import queue
 import sys
 from typing import Optional
 
@@ -62,7 +61,6 @@ message_display_filters = {msg_type: True for msg_type in message_display_types}
 
 main_window = None
 qt_app = None
-xml_queue = None
 log_port = None
 zephyr_port = None
 cmd_filename = ""
@@ -71,6 +69,16 @@ serial_suspended = False
 active_config_set = None
 window_size = "Medium"
 _app_exit_requested = False
+auto_ack_enabled = False
+
+
+class ZephyrSignalBus(QtCore.QObject):
+    log_message = QtCore.pyqtSignal(str)
+    zephyr_message = QtCore.pyqtSignal(str)
+    command_message = QtCore.pyqtSignal(str)
+
+
+signal_bus: Optional[ZephyrSignalBus] = None
 
 
 def _settings_path() -> str:
@@ -85,6 +93,17 @@ def _ensure_app() -> QtWidgets.QApplication:
     app.setWindowIcon(QtGui.QIcon(":/icons/icon.svg"))
     qt_app = app
     return app
+
+
+def _ensure_signal_bus() -> ZephyrSignalBus:
+    global signal_bus
+    _ensure_app()
+    if signal_bus is None:
+        signal_bus = ZephyrSignalBus()
+        signal_bus.log_message.connect(AddMsgToLogDisplay)
+        signal_bus.zephyr_message.connect(AddMsgToZephyrDisplay)
+        signal_bus.command_message.connect(_handle_command_message)
+    return signal_bus
 
 
 def _load_settings() -> configparser.ConfigParser:
@@ -178,28 +197,28 @@ def MainWindow(
     logport: serial.Serial,
     zephyrport: serial.Serial,
     cmd_fname: str,
-    xmlqueue: queue.Queue,
 ) -> None:
     global main_window
     global log_port
     global zephyr_port
     global instrument
     global cmd_filename
-    global xml_queue
     global message_display_filters
     global active_config_set
     global window_size
+    global auto_ack_enabled
 
     _ensure_app()
+    _ensure_signal_bus()
 
     instrument = config["Instrument"]
     log_port = logport
     zephyr_port = zephyrport
     cmd_filename = cmd_fname
-    xml_queue = xmlqueue
     active_config_set = config["ConfigSet"]
     window_size = config.get("WindowSize", "Medium")
     message_display_filters = NormalizeMessageDisplayFilters(config.get("MessageDisplayFilters", {}))
+    auto_ack_enabled = bool(config.get("AutoAck", False))
 
     def _on_mode(mode: str) -> None:
         if serial_suspended:
@@ -388,15 +407,46 @@ def SerialSuspend() -> None:
 
 
 def AddMsgToXmlQueue(msg: str) -> None:
-    global xml_queue
     if msg is None:
         return
 
-    time_val, millis = ZephyrSimUtils.GetTime()
-    timestring = "[" + time_val + "." + millis + "] "
+    timestring = _formatted_timestamp()
     newmsg = "<XMLTOKEN>" + msg + "</XMLTOKEN>"
     parsed = xmltodict.parse(newmsg)
-    xml_queue.put(f'{timestring}  (TO) {parsed["XMLTOKEN"]}\n')
+    EmitZephyrMessage(f'{timestring}  (TO) {parsed["XMLTOKEN"]}\n')
+
+
+def EmitLogMessage(message: str) -> None:
+    _ensure_signal_bus().log_message.emit(message)
+
+
+def EmitZephyrMessage(message: str) -> None:
+    _ensure_signal_bus().zephyr_message.emit(message)
+
+
+def EmitCommandMessage(message: str) -> None:
+    _ensure_signal_bus().command_message.emit(message)
+
+
+def _handle_command_message(cmd: str) -> None:
+    if not auto_ack_enabled:
+        return
+
+    timestring = _formatted_timestamp()
+    if cmd == "TMAck":
+        msg = ZephyrSimUtils.sendTMAck(instrument, "ACK", cmd_filename, zephyr_port)
+        AddMsgToXmlQueue(msg)
+        AddDebugMsg(timestring + "Sent TMAck")
+    elif cmd == "SAck":
+        msg = ZephyrSimUtils.sendSAck(instrument, "ACK", cmd_filename, zephyr_port)
+        AddMsgToXmlQueue(msg)
+        AddDebugMsg(timestring + "Sent SAck")
+    elif cmd == "RAAck":
+        msg = ZephyrSimUtils.sendRAAck(instrument, "ACK", cmd_filename, zephyr_port)
+        AddMsgToXmlQueue(msg)
+        AddDebugMsg(timestring + "Sent RAAck")
+    else:
+        AddDebugMsg("Unknown command", True)
 
 
 def SetTmDir(filename: str) -> None:

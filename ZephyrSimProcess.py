@@ -20,19 +20,19 @@ Functions:
 # -*- coding: utf-8 -*-
 
 import serial
-import queue
 import datetime
 import xmltodict
 import time
+from typing import Callable, Optional
 
 # globals
 zephyr_port = None
 log_port = None
 inst_filename = ''
 xml_filename = ''
-inst_queue = None
-xml_queue = None
-cmd_queue = None
+log_message_cb: Optional[Callable[[str], None]] = None
+zephyr_message_cb: Optional[Callable[[str], None]] = None
+command_message_cb: Optional[Callable[[str], None]] = None
 tm_dir = ''
 instrument = ''
 
@@ -53,9 +53,10 @@ def HandleStratoLogMessage(message: str) -> None:
     _, time, _, milliseconds = GetDateTime()
     timestring = '[' + time + '.' + milliseconds + '] '
 
-    # place on the queue to be displayed in the GUI
+    # emit to the GUI thread
     message = timestring + message
-    inst_queue.put(message)
+    if log_message_cb is not None:
+        log_message_cb(message)
 
     # log to the file
     with open(inst_filename, 'a') as inst:
@@ -87,19 +88,23 @@ def HandleZephyrMessage(first_line: str) -> None:
         while len(binary_section) < n_bytes:
             binary_section.extend(zephyr_port.read(n_bytes - len(binary_section)))
         WriteTMFile(message, binary_section)
-        cmd_queue.put('TMAck')
+        if command_message_cb is not None:
+            command_message_cb('TMAck')
     elif 'S' == msg_type:
-        cmd_queue.put('SAck')
+        if command_message_cb is not None:
+            command_message_cb('SAck')
     elif 'RA' == msg_type:
-        cmd_queue.put('RAAck')
+        if command_message_cb is not None:
+            command_message_cb('RAAck')
 
     # formulate the time
     _, time, _, milliseconds = GetDateTime()
     timestring = '[' + time + '.' + milliseconds + '] '
 
-    # place on the queue to be displayed in the GUI
+    # emit to the GUI thread
     display = f'{timestring} (FROM){msg_dict["XMLTOKEN"]}\n'
-    xml_queue.put(display)
+    if zephyr_message_cb is not None:
+        zephyr_message_cb(display)
 
     # log to the file
     with open(xml_filename, 'a') as xml:
@@ -116,37 +121,37 @@ def WriteTMFile(message: str, binary: bytes) -> None:
 
 # This function is run as a thread from ZephyrSim.py.
 def ReadInstrument(
-    inst_queue_in: queue.Queue,
-    xml_queue_in: queue.Queue,
+    log_message_cb_in: Callable[[str], None],
+    zephyr_message_cb_in: Callable[[str], None],
+    command_message_cb_in: Callable[[str], None],
     logport: serial.Serial,
     zephyrport: serial.Serial,
     inst_filename_in: str,
     xml_filename_in: str,
     tm_dir_in: str,
     inst_in: str,
-    cmd_queue_in: queue.Queue,
     config: dict) -> None:
 
     global zephyr_port
     global log_port
     global inst_filename
     global xml_filename
-    global inst_queue
-    global xml_queue
     global tm_dir
     global instrument
-    global cmd_queue
+    global log_message_cb
+    global zephyr_message_cb
+    global command_message_cb
 
     # assign globals
     zephyr_port = zephyrport
     log_port = logport
     inst_filename = inst_filename_in
     xml_filename = xml_filename_in
-    inst_queue = inst_queue_in
-    xml_queue = xml_queue_in
+    log_message_cb = log_message_cb_in
+    zephyr_message_cb = zephyr_message_cb_in
+    command_message_cb = command_message_cb_in
     tm_dir = tm_dir_in
     instrument = inst_in
-    cmd_queue = cmd_queue_in
 
     port_sharing = config['SharedPorts']
     zephyr_port.flushInput()
