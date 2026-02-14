@@ -25,6 +25,7 @@ import serial
 import xmltodict
 from PyQt6 import QtCore, QtGui, QtWidgets
 
+import ZephyrSimResources_rc  # noqa: F401
 import ZephyrSimUtils
 from ConfigDialog import ConfigDialog
 from MainWindowQt import MainWindowQt
@@ -81,6 +82,7 @@ def _ensure_app() -> QtWidgets.QApplication:
     app = QtWidgets.QApplication.instance()
     if app is None:
         app = QtWidgets.QApplication(sys.argv)
+    app.setWindowIcon(QtGui.QIcon(":/icons/icon.svg"))
     qt_app = app
     return app
 

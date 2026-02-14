@@ -3,7 +3,6 @@
 
 from typing import Callable, Dict, List, Tuple
 
-import os
 import pyperclip
 from PyQt6 import QtGui, QtWidgets
 
@@ -59,9 +58,7 @@ class MainWindowQt(QtWidgets.QMainWindow):
         self.display_buttons = {}
 
         self.setWindowTitle(config["Instrument"])
-        icon_path = os.path.join(os.path.dirname(__file__), "icon.ico")
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QtGui.QIcon(icon_path))
+        self.setWindowIcon(QtGui.QIcon(":/icons/icon.svg"))
 
         self._build_ui()
 
