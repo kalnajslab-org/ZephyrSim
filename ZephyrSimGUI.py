@@ -54,8 +54,8 @@ window_params = {
 }
 button_sizes = {"Small": (70, 28), "Medium": (84, 30), "Large": (96, 34)}
 
-MAXLOGLINES = 2000
-KEEPLOGLINES = 1600
+MAXLOGLINES = 500
+KEEPLOGLINES = 250
 
 message_display_types = ["TM", "TC", "IM", "TMAck", "GPS", "TCAck", "IMAck", "IMR"]
 message_display_filters = {msg_type: True for msg_type in message_display_types}
@@ -145,7 +145,6 @@ def _trim_text_edit(edit: QtWidgets.QTextEdit) -> None:
         cursor = edit.textCursor()
         cursor.movePosition(QtGui.QTextCursor.MoveOperation.End)
         edit.setTextCursor(cursor)
-
 
 def _append_colored_text(edit: QtWidgets.QTextEdit, message: str, color_name: Optional[str]) -> None:
     cursor = edit.textCursor()
@@ -264,6 +263,7 @@ def AddMsgToZephyrDisplay(message: str) -> None:
         return
     if not ShouldDisplayMessage(message):
         return
+    _trim_text_edit(main_window.zephyr_window)
 
     if "(TO)" in message:
         _append_colored_text(main_window.zephyr_window, message, "blue")
@@ -325,7 +325,7 @@ def GPSMessage() -> None:
 
 
 def SWMessage() -> None:
-    if serial_suspended:
+    if serial_suspended or main_window is None:
         return
     timestring = _formatted_timestamp()
     print(timestring + "Sending shutdown warning")
