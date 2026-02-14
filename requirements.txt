@@ -1,0 +1,4 @@
+pyserial
+xmltodict
+pyperclip
+PyQt6
