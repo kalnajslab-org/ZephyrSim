@@ -15,6 +15,7 @@ Public API is intentionally kept compatible with ZephyrSim.py:
 
 import ast
 import configparser
+import datetime
 import json
 import os
 import sys
@@ -24,11 +25,14 @@ import serial
 import xmltodict
 from PyQt6 import QtCore, QtGui, QtWidgets
 
-import ZephyrSimResources_rc  # noqa: F401
 import ZephyrSimUtils
 from ConfigDialog import ConfigDialog
 from MainWindowQt import MainWindowQt
 
+# Wait 10 seconds before sending GPS messages
+last_gps_timestamp = datetime.datetime.now().timestamp() - 50
+# Perhaps this should be a configuration option
+sza = 120
 
 ZephyrMessagesNoParams = [
     ("SW", "Send a Shutdown Warning"),
@@ -70,6 +74,7 @@ active_config_set = None
 window_size = "Medium"
 _app_exit_requested = False
 auto_ack_enabled = False
+gps_timer: Optional[QtCore.QTimer] = None
 
 
 class ZephyrSignalBus(QtCore.QObject):
@@ -85,19 +90,8 @@ def _settings_path() -> str:
     return os.path.abspath(os.path.expanduser("~/ZephyrSim.ini"))
 
 
-def _ensure_app() -> QtWidgets.QApplication:
-    global qt_app
-    app = QtWidgets.QApplication.instance()
-    if app is None:
-        app = QtWidgets.QApplication(sys.argv)
-    app.setWindowIcon(QtGui.QIcon(":/icons/icon.svg"))
-    qt_app = app
-    return app
-
-
-def _ensure_signal_bus() -> ZephyrSignalBus:
+def _connect_signal_bus() -> ZephyrSignalBus:
     global signal_bus
-    _ensure_app()
     if signal_bus is None:
         signal_bus = ZephyrSignalBus()
         signal_bus.log_message.connect(AddMsgToLogDisplay)
@@ -183,7 +177,6 @@ def _formatted_timestamp() -> str:
 
 def ConfigWindow() -> dict:
     global window_size
-    _ensure_app()
     while True:
         dialog = ConfigDialog()
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted and dialog.result_config is not None:
@@ -191,13 +184,23 @@ def ConfigWindow() -> dict:
             return dialog.result_config
         CloseAndExit()
 
+def do_gps(config) -> None:
+        global last_gps_timestamp
+        # send GPS messages every 60 seconds
+        now_timestamp = datetime.datetime.now().timestamp()
+        if config["AutoGPS"] and now_timestamp - last_gps_timestamp >= 60:
+            last_gps_timestamp = now_timestamp
+            gps_msg = ZephyrSimUtils.sendGPS(sza, cmd_filename, config['ZephyrPort'])
+            AddMsgToXmlQueue(gps_msg)
 
 def MainWindow(
     config: dict,
     logport: serial.Serial,
     zephyrport: serial.Serial,
     cmd_fname: str,
-) -> None:
+) -> MainWindowQt:
+    '''Provides the main window logic. It creates the MainWindowQt instance and connects it to the ZephyrSimProcess thread via signals.'''
+
     global main_window
     global log_port
     global zephyr_port
@@ -207,9 +210,10 @@ def MainWindow(
     global active_config_set
     global window_size
     global auto_ack_enabled
+    global gps_timer
 
-    _ensure_app()
-    _ensure_signal_bus()
+    # Connect signal_bus signals to the GUI update functions
+    _connect_signal_bus()
 
     instrument = config["Instrument"]
     log_port = logport
@@ -263,6 +267,14 @@ def MainWindow(
     main_window.show()
     UpdateDisplayFilterButtons()
 
+    # Run periodic GUI polling and AutoGPS checks in the Qt event loop.
+    gps_timer = QtCore.QTimer(main_window)
+    gps_timer.setInterval(100)
+    gps_timer.timeout.connect(lambda: do_gps(config))
+    gps_timer.start()
+
+    return main_window
+
 
 def AddMsgToLogDisplay(message: str) -> None:
     if main_window is None:
@@ -301,13 +313,6 @@ def AddDebugMsg(message: str, error: bool = False) -> None:
         print("ERROR:", message)
     else:
         print(message)
-
-
-def PollWindowEvents() -> None:
-    _ensure_app().processEvents(QtCore.QEventLoop.ProcessEventsFlag.AllEvents, 10)
-    if _app_exit_requested:
-        CloseAndExit()
-
 
 def TCMessage() -> None:
     if serial_suspended or main_window is None:
@@ -417,15 +422,15 @@ def AddMsgToXmlQueue(msg: str) -> None:
 
 
 def EmitLogMessage(message: str) -> None:
-    _ensure_signal_bus().log_message.emit(message)
+    _connect_signal_bus().log_message.emit(message)
 
 
 def EmitZephyrMessage(message: str) -> None:
-    _ensure_signal_bus().zephyr_message.emit(message)
+    _connect_signal_bus().zephyr_message.emit(message)
 
 
 def EmitCommandMessage(message: str) -> None:
-    _ensure_signal_bus().command_message.emit(message)
+    _connect_signal_bus().command_message.emit(message)
 
 
 def _handle_command_message(cmd: str) -> None:

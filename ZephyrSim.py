@@ -22,7 +22,12 @@ Functions:
 """
 # -*- coding: utf-8 -*-
 
+from PyQt6 import QtGui, QtWidgets
+
+import gc
+import resource
 import sys
+import tracemalloc
 if sys.version_info < (3, 9):
     raise Exception("This script requires Python 3.9 or later. Please upgrade Python.")
 
@@ -36,6 +41,7 @@ import datetime
 
 # libraries
 import threading
+import tracemalloc, gc, resource, time
 
 # globals
 instrument = ''
@@ -93,6 +99,9 @@ def main() -> None:
 
     parse_args()
 
+    app = QtWidgets.QApplication(sys.argv)
+    app.setWindowIcon(QtGui.QIcon(":/icons/icon.svg"))
+
     # get configuration
     config = ZephyrSimGUI.ConfigWindow()
 
@@ -103,7 +112,8 @@ def main() -> None:
     FileSetup(config)
 
     # start the main output window
-    ZephyrSimGUI.MainWindow(config, logport=config['LogPort'], zephyrport=config['ZephyrPort'], cmd_fname=cmd_filename)
+
+    window = ZephyrSimGUI.MainWindow(config, logport=config['LogPort'], zephyrport=config['ZephyrPort'], cmd_fname=cmd_filename)
 
     # Set the tm filename
     ZephyrSimGUI.SetTmDir(tm_dir)
@@ -122,21 +132,7 @@ def main() -> None:
         config)
     threading.Thread(target=ZephyrSimProcess.ReadInstrument,args=obc_parser_args).start()
 
-    # Wait 10 seconds before sending GPS messages
-    last_gps_timestamp = datetime.datetime.now().timestamp() - 50
-    # Perhaps this should be a configuration option
-    sza = 120
-
-    while True:
-        # poll the GUI
-        ZephyrSimGUI.PollWindowEvents()
-
-        # send GPS messages every 60 seconds
-        now_timestamp = datetime.datetime.now().timestamp()
-        if config["AutoGPS"] and now_timestamp - last_gps_timestamp >= 60:
-            last_gps_timestamp = now_timestamp
-            gps_msg = ZephyrSimUtils.sendGPS(sza, cmd_filename, config['ZephyrPort'])
-            ZephyrSimGUI.AddMsgToXmlQueue(gps_msg)
+    sys.exit(app.exec())
 
 if (__name__ == '__main__'):
     main()

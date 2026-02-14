@@ -108,6 +108,7 @@ class MainWindowQt(QtWidgets.QMainWindow):
         self.gps_input = QtWidgets.QLineEdit("120.0")
         self.gps_input.setFixedWidth(90)
         self.gps_input.returnPressed.connect(self.on_gps)
+
         self.gps_input.setToolTip("GPS SZA value")
         sza_layout.addWidget(self.gps_button)
         sza_layout.addWidget(self.gps_input)

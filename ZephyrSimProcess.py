@@ -65,7 +65,7 @@ def HandleStratoLogMessage(message: str) -> None:
 def HandleZephyrMessage(first_line: str) -> None:
     next_lines = ''
     while next_lines.find('</CRC>') == -1:
-        next_lines = next_lines + zephyr_port.readline().decode('ascii')
+        next_lines = next_lines + zephyr_port.readline().decode('ascii', errors='ignore')
     message = first_line + next_lines
 
     # The message is not correct XML, since it doesn't have opening/closing
@@ -164,20 +164,21 @@ def ReadInstrument(
         # They can be opened/closed from the GUI, when
         # the suspend button is pressed. Thus the exception
         # handling is used to detect this.
-
         try:
             if not port_sharing:
                 if log_port.is_open: 
                     new_log_line = log_port.readline()
                     if new_log_line:
-                        HandleStratoLogMessage(str(new_log_line,'ascii'))
+                        print('New log line:', new_log_line)
+                        HandleStratoLogMessage(new_log_line.decode('ascii', errors='ignore'))
                 if zephyr_port.is_open: 
                     new_zephyr_line = zephyr_port.readline()
                     if new_zephyr_line:
                         # skip the stratocore serial keepalive messages
                         if new_zephyr_line != b'\n':
+                            print('New zephyr line:', new_zephyr_line)
                             try:
-                                HandleZephyrMessage(str(new_zephyr_line,'ascii'))
+                                HandleZephyrMessage(new_zephyr_line.decode('ascii', errors='ignore'))
                             except UnicodeDecodeError as e:
                                 # Happens when a garbled message is received, due to the 
                                 # sleep behavior of the MAX3381 chip. Just ignore the message.
@@ -192,10 +193,10 @@ def ReadInstrument(
                         if new_line != b'\n':
                             # if the line contains a '<', it is a Zephyr message
                             if (-1 != new_line.find(b'<')):
-                                HandleZephyrMessage(str(new_line,'ascii'))
+                                HandleZephyrMessage(new_line.decode('ascii', errors='ignore'))
                             # otherwise, it is a log message
                             else:
-                                HandleStratoLogMessage(str(new_line,'ascii'))
+                                HandleStratoLogMessage(new_line.decode('ascii', errors='ignore'))
         except OSError as e:
             # Happens when the port is closed
             # It's lame to catch this exception at the top level, but seems to be the only way to detect
