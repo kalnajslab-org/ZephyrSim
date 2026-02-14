@@ -158,6 +158,11 @@ def _append_colored_text(edit: QtWidgets.QTextEdit, message: str, color_name: Op
     edit.ensureCursorVisible()
 
 
+def _formatted_timestamp() -> str:
+    time_val, millis = ZephyrSimUtils.GetTime()
+    return "[" + time_val + "." + millis + "] "
+
+
 def ConfigWindow() -> dict:
     global window_size
     _ensure_app()
@@ -288,8 +293,7 @@ def PollWindowEvents() -> None:
 def TCMessage() -> None:
     if serial_suspended or main_window is None:
         return
-    time_val, millis = ZephyrSimUtils.GetTime()
-    timestring = "[" + time_val + "." + millis + "] "
+    timestring = _formatted_timestamp()
     tc_text = main_window.tc_input.text() + ";"
     if tc_text == ";":
         QtWidgets.QMessageBox.warning(main_window, "Input Error", "TC text must not be empty")
@@ -314,8 +318,7 @@ def GPSMessage() -> None:
         QtWidgets.QMessageBox.warning(main_window, "Input Error", "SZA must be a float")
         return
 
-    time_val, millis = ZephyrSimUtils.GetTime()
-    timestring = "[" + time_val + "." + millis + "] "
+    timestring = _formatted_timestamp()
     print(timestring + "Sending GPS, SZA =", str(sza))
     msg = ZephyrSimUtils.sendGPS(sza, cmd_filename, zephyr_port)
     AddMsgToXmlQueue(msg)
@@ -324,8 +327,7 @@ def GPSMessage() -> None:
 def SWMessage() -> None:
     if serial_suspended:
         return
-    time_val, millis = ZephyrSimUtils.GetTime()
-    timestring = "[" + time_val + "." + millis + "] "
+    timestring = _formatted_timestamp()
     print(timestring + "Sending shutdown warning")
     ZephyrSimUtils.sendSW(instrument, cmd_filename, zephyr_port)
 
@@ -333,8 +335,7 @@ def SWMessage() -> None:
 def SAckMessage() -> None:
     if serial_suspended:
         return
-    time_val, millis = ZephyrSimUtils.GetTime()
-    timestring = "[" + time_val + "." + millis + "] "
+    timestring = _formatted_timestamp()
     print(timestring + "Sending safety ack")
     msg = ZephyrSimUtils.sendSAck(instrument, "ACK", cmd_filename, zephyr_port)
     AddMsgToXmlQueue(msg)
@@ -343,8 +344,7 @@ def SAckMessage() -> None:
 def RAAckMessage() -> None:
     if serial_suspended:
         return
-    time_val, millis = ZephyrSimUtils.GetTime()
-    timestring = "[" + time_val + "." + millis + "] "
+    timestring = _formatted_timestamp()
     print(timestring + "Sent RAAck")
     msg = ZephyrSimUtils.sendRAAck(instrument, "ACK", cmd_filename, zephyr_port)
     AddMsgToXmlQueue(msg)
@@ -353,8 +353,7 @@ def RAAckMessage() -> None:
 def TMAckMessage() -> None:
     if serial_suspended:
         return
-    time_val, millis = ZephyrSimUtils.GetTime()
-    timestring = "[" + time_val + "." + millis + "] "
+    timestring = _formatted_timestamp()
     print(timestring + "Sending TM ack")
     msg = ZephyrSimUtils.sendTMAck(instrument, "ACK", cmd_filename, zephyr_port)
     AddMsgToXmlQueue(msg)
