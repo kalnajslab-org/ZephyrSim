@@ -28,10 +28,13 @@ import gc
 import resource
 import sys
 import tracemalloc
+
+import ZephyrSignals
 if sys.version_info < (3, 9):
     raise Exception("This script requires Python 3.9 or later. Please upgrade Python.")
 
 # modules
+import ConfigDialog
 import ZephyrSimGUI
 import ZephyrSimProcess
 import ZephyrSimUtils
@@ -103,7 +106,15 @@ def main() -> None:
     app.setWindowIcon(QtGui.QIcon(":/icons/icon.svg"))
 
     # get configuration
-    config = ZephyrSimGUI.ConfigWindow()
+    #config = ZephyrSimGUI.ConfigWindow()
+
+    while True:
+        dialog = ConfigDialog.ConfigDialog()
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted and dialog.result_config is not None:
+            config = dialog.result_config
+            break
+        else:
+            sys.exit(0)
 
     # set global variables
     instrument = config['Instrument']
@@ -111,18 +122,16 @@ def main() -> None:
     # set up the files and structure
     FileSetup(config)
 
-    # start the main output window
-
-    window = ZephyrSimGUI.MainWindow(config, logport=config['LogPort'], zephyrport=config['ZephyrPort'], cmd_fname=cmd_filename)
+    # Create the main output window
+    signals = ZephyrSignals.ZephyrSignalBus()
+    guiManager = ZephyrSimGUI.ZephyrSimGUI(signals, config, logport=config['LogPort'], zephyrport=config['ZephyrPort'], cmd_fname=cmd_filename)
 
     # Set the tm filename
-    ZephyrSimGUI.SetTmDir(tm_dir)
+    guiManager.set_tm_dir(tm_dir)
 
     # start listening for instrument messages over serial
     obc_parser_args=(
-        ZephyrSimGUI.EmitLogMessage,
-        ZephyrSimGUI.EmitZephyrMessage,
-        ZephyrSimGUI.EmitCommandMessage,
+        signals,
         config['LogPort'],
         config['ZephyrPort'],
         inst_filename,

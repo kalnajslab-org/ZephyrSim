@@ -25,16 +25,16 @@ import xmltodict
 import time
 from typing import Callable, Optional
 
+import ZephyrSignals
+
 # globals
 zephyr_port = None
 log_port = None
 inst_filename = ''
 xml_filename = ''
-log_message_cb: Optional[Callable[[str], None]] = None
-zephyr_message_cb: Optional[Callable[[str], None]] = None
-command_message_cb: Optional[Callable[[str], None]] = None
 tm_dir = ''
 instrument = ''
+signals = None
 
 def GetDateTime() -> tuple:
     # create date and time strings
@@ -55,8 +55,7 @@ def HandleStratoLogMessage(message: str) -> None:
 
     # emit to the GUI thread
     message = timestring + message
-    if log_message_cb is not None:
-        log_message_cb(message)
+    signals.log_message.emit(message)
 
     # log to the file
     with open(inst_filename, 'a') as inst:
@@ -88,14 +87,11 @@ def HandleZephyrMessage(first_line: str) -> None:
         while len(binary_section) < n_bytes:
             binary_section.extend(zephyr_port.read(n_bytes - len(binary_section)))
         WriteTMFile(message, binary_section)
-        if command_message_cb is not None:
-            command_message_cb('TMAck')
+        signals.command_message.emit('TMAck')
     elif 'S' == msg_type:
-        if command_message_cb is not None:
-            command_message_cb('SAck')
+        signals.command_message.emit('SAck')
     elif 'RA' == msg_type:
-        if command_message_cb is not None:
-            command_message_cb('RAAck')
+        signals.command_message.emit('RAAck')
 
     # formulate the time
     _, time, _, milliseconds = GetDateTime()
@@ -103,8 +99,7 @@ def HandleZephyrMessage(first_line: str) -> None:
 
     # emit to the GUI thread
     display = f'{timestring} (FROM){msg_dict["XMLTOKEN"]}\n'
-    if zephyr_message_cb is not None:
-        zephyr_message_cb(display)
+    signals.zephyr_message.emit(display)
 
     # log to the file
     with open(xml_filename, 'a') as xml:
@@ -121,9 +116,7 @@ def WriteTMFile(message: str, binary: bytes) -> None:
 
 # This function is run as a thread from ZephyrSim.py.
 def ReadInstrument(
-    log_message_cb_in: Callable[[str], None],
-    zephyr_message_cb_in: Callable[[str], None],
-    command_message_cb_in: Callable[[str], None],
+    app_signals: ZephyrSignals.ZephyrSignalBus,
     logport: serial.Serial,
     zephyrport: serial.Serial,
     inst_filename_in: str,
@@ -132,24 +125,20 @@ def ReadInstrument(
     inst_in: str,
     config: dict) -> None:
 
+    global signals
     global zephyr_port
     global log_port
     global inst_filename
     global xml_filename
     global tm_dir
     global instrument
-    global log_message_cb
-    global zephyr_message_cb
-    global command_message_cb
 
     # assign globals
+    signals = app_signals
     zephyr_port = zephyrport
     log_port = logport
     inst_filename = inst_filename_in
     xml_filename = xml_filename_in
-    log_message_cb = log_message_cb_in
-    zephyr_message_cb = zephyr_message_cb_in
-    command_message_cb = command_message_cb_in
     tm_dir = tm_dir_in
     instrument = inst_in
 
@@ -169,7 +158,6 @@ def ReadInstrument(
                 if log_port.is_open: 
                     new_log_line = log_port.readline()
                     if new_log_line:
-                        print('New log line:', new_log_line)
                         HandleStratoLogMessage(new_log_line.decode('ascii', errors='ignore'))
                 if zephyr_port.is_open: 
                     new_zephyr_line = zephyr_port.readline()
