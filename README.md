@@ -1,6 +1,6 @@
 # ZephyrSim Simulator
 
-![ZephyrSim Simulator Overview](ZephyrSim_Simulator.png)
+![ZephyrSim Simulator Overview](Resources/ZephyrSim_Simulator.png)
 
 This repository contains a platform-independent, Python-based ZephyrSim for the CNES Strateole 2 campaign. This simulator adds the ability to receive and display debug messages from LASP instruments over the same serial connection as the XML-based Zephyr communications.
 
@@ -10,55 +10,68 @@ pip3 install -r requirements.txt
 python3 ZephyrSim.py
 ```
 
-The first time that you run it you will get a popup from `SimplePythonGUI` asking if you have a license for non-commericial usage.
-
-## Dependencies
-
-See *requirements.txt* for python modules.
-
-## Class Summary
-
-- `ConfigDialog` (`ConfigDialog.py`): Startup/configuration dialog that manages saved config sets, opens selected serial ports, and returns the validated runtime config.
-- `MainWindowQt` (`MainWindowQt.py`): Main application window (`QMainWindow`) with mode controls, command buttons, display filter controls, and log/output text panes.
-- `ZephyrSimGUI` (`ZephyrSimGUI.py`): GUI controller that wires callbacks to `MainWindowQt`, manages simulator UI state, sends outbound messages, and handles display updates.
-- `ZephyrSignalBus` (`ZephyrSignals.py`): Shared Qt signal bus (`log_message`, `zephyr_message`, `command_message`) used for decoupled communication between components.
-- `SerialProcessor` (`SerialProcessor.py`): Serial I/O processor that consumes `QSerialPort.readyRead` events, parses incoming log/XML/TM data, emits GUI signals, and writes session files.
-
 ## Interface
 
-The simulator uses the `PySimpleGUI` library to provide multiple input and output windows that allow the user to interact with the instrument under test.
+The simulator uses the `PyQt6` library to provide multiple input and output windows 
+that allow the user to interact with the instrument under test.
 
 ### Startup
 
-On startup, the user has the following options:
+On startup, the user has the option to load a previously saved configuration or to create a new configuration. 
+The configuration includes the serial ports to use for Zephyr and debug communication, the instrument under test, 
+and whether to automatically respond with ACK messages.
 
-<img src="/Screenshots/WelcomeWindow.PNG" alt="Welcome Window Screenshot" width="300"/>
+![Startup Configuration](Resources/ConfigureScreen.PNG)
 
 Example ports: (Windows) `COM3`, (Linux) `/dev/ttyUSB0`, (MacOS) `/dev/cu.usbmodem165659901`
 
-If the user responds "Yes" to the "Automatically respond with ACKs?" prompt, then in response to `S`, `RA`, and `TM` XML messages, the simulator will send affirmative `SAck`, `RAAck`, and `TMAck` messages respectively. This is the default option. Otherwise, the user must manually send these commands.
+If the user selects "Automatically respond with ACKs?" prompt, then in response to `S`, `RA`, and `TM` XML messages, 
+the simulator will send affirmative `SAck`, `RAAck`, and `TMAck` messages respectively. This is the default option. 
+Otherwise, the user must manually send these commands.
 
-### Sending Commands
+### Mode Selection
 
-To send a command, the user must simply click the corresponding button in the Command Menu window and then complete any follow-up prompt windows as applicable.
+The instrument Zephyr mode is selected in the _Mode Select_ box.
 
-<img src="/Screenshots/CommandMenu.PNG" alt="Command Menu Screenshot" width="400"/>
+![Mode Selection](Resources/ModeSelect.PNG)
 
-### Simulator Log
+## Telecommands
 
-The commands that are sent and simulator decisions that are made are displayed in the Debug window. Note that certain commands are color-coded. The exact time of each command is prepended in square brackets.
+The _TeleCommand_ box contains buttons for sending common telecommands to the instrument. If the telecommand takes
+parameters, they are included as comma-separated values. The terminating semicolon is not entered; it is automatically appended 
+when the command is sent. Either press the TC button or hit Enter to send the command.
 
-<img src="/Screenshots/DebugWindow.PNG" alt="Debug Window Screenshot" width="500"/>
+![Telecommands](Resources/Telecommands.PNG)
+
+## Display Filters
+
+The _Display Filter_ box contains checkboxes for filtering the XML and debug messages shown in the Instrument Output window.
+The XML message types are based on the Zephyr XML message types. By default, all message types are shown. Unchecking a message
+type will hide messages of that type from the Instrument Output window, but they will still be logged to the session files.
+The message filter selections are saved in the configuration and will persist across sessions. 
+
+![Display Filters](Resources/DisplayFilters.PNG)
 
 ### Viewing Instrument Output
 
-The Instrument Output window has two scrolling text outputs: the instrument debug output, and the XML output. The instrument debug displays the StratoCore-specific debug messages, where errors are colored red. The XML output shows a succinct one-line message for each type of XML message received. The exact time of each message is prepended in square brackets.
+There are two windows viewing the instrument behavior: _StratoCore Log Messages_, and _Messages TO/FROM \<instrument\>_
+(See the first screenshot above for examples of each).
 
-<img src="/Screenshots/InstrumentOutput.PNG" alt="Instrument Output Screenshot" width="900"/>
+The _Messages_ window displays the complete communication between the Zephyr OBC and the instrument.
+
+![Messages Window](Resources/ZephyrMessages.PNG)
+
+The _Log Messages_ window displays the log messages that are received from the instrument over the Teensy USB serial port. 
+These messages are not part of the Zephyr communication, but are used for software development. Although
+these messages are still transmitted during remote flight operations, the serial port will not be connected to
+any devices.
+
+![Log Messages Window](Resources/LogMessages.PNG)
 
 ## Log File Structure
 
-Each time a ZephyrSim Simulator session is successfully started, a directory under the `sessions/` directory is created. Each session's directory will be named according to the date and instrument: `INST_DD-Mmm-YY_HH-MM-SS/`.
+Each time a ZephyrSim Simulator session is successfully started, a directory under the `sessions/` directory is created. Each session's 
+directory will be named according to the date and instrument: `INST_DD-Mmm-YY_HH-MM-SS/`.
 
 ### Session Contents
 
@@ -91,6 +104,11 @@ sessions/
 |---etc...
 ```
 
-## Scripting
+## Design
 
-The `Legacy/` directory contains old scripts used to run the original simulator code. The advantage of using scripting is automation. **In the future, this could be achieved with the new architecture by writing out a list of commands with along with timing in a file to be parsed and sent**.
+- `ZephyrSim.py`: Main application entry point that initializes the Qt application, sets up the file structure for the session, initializes the GUI and serial processor, and starts the Qt event loop.
+- `ConfigDialog` (`ConfigDialog.py`): Startup/configuration dialog that manages saved config sets, opens selected serial ports, and returns the validated runtime config.
+- `MainWindowQt` (`MainWindowQt.py`): Main application window (`QMainWindow`) with mode controls, command buttons, display filter controls, and log/output text panes.
+- `ZephyrSimGUI` (`ZephyrSimGUI.py`): GUI controller that wires callbacks to `MainWindowQt`, manages simulator UI state, sends outbound messages, and handles display updates.
+- `ZephyrSignalBus` (`ZephyrSignals.py`): Shared Qt signal bus (`log_message`, `zephyr_message`, `command_message`) used for decoupled communication between components.
+- `SerialProcessor` (`SerialProcessor.py`): Serial I/O processor that consumes `QSerialPort.readyRead` events, parses incoming log/XML/TM data, emits GUI signals, and writes session files.
