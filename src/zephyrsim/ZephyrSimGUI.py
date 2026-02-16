@@ -27,10 +27,10 @@ from typing import Optional
 import xmltodict
 from PyQt6 import QtCore, QtGui, QtSerialPort, QtWidgets
 
-import ZephyrSimUtils
-from ZephyrSignals import ZephyrSignalBus
-from ConfigDialog import ConfigDialog
-from MainWindowQt import MainWindowQt
+from . import ZephyrSimUtils
+from .ZephyrSignals import ZephyrSignalBus
+from .ConfigDialog import ConfigDialog
+from .MainWindowQt import MainWindowQt
 
 # Perhaps this should be a configuration option
 DEFAULT_SZA = 120

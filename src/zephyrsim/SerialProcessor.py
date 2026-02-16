@@ -11,7 +11,7 @@ from typing import Optional
 import xmltodict
 from PyQt6 import QtCore, QtSerialPort
 
-import ZephyrSignals
+from . import ZephyrSignals
 
 
 def GetDateTime() -> tuple:

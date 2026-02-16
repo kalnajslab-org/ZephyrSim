@@ -6,8 +6,14 @@ This repository contains a platform-independent, Python-based ZephyrSim for the 
 
 ## Quickstart
 ```sh
-pip3 install -r requirements.txt
-python3 ZephyrSim.py
+pip3 install -e .
+Zephyrsim
+```
+
+Install directly from GitHub:
+```sh
+pip install "git+https://github.com/kalnajslab-org/ZephyrSim.git"
+zephyrsim
 ```
 
 ## Interface
@@ -107,9 +113,9 @@ sessions/
 ## Design
 
 - `ZephyrSim.py`: Main application entry point that initializes the Qt application, sets up the file structure for the session, initializes the GUI and serial processor, and starts the Qt event loop.
-- `ConfigDialog` (`ConfigDialog.py`): Startup/configuration dialog that manages saved config sets, opens selected serial ports, and returns the validated runtime config.
-- `MainWindowQt` (`MainWindowQt.py`): Main application window (`QMainWindow`) with mode controls, command buttons, display filter controls, and log/output text panes.
-- `ZephyrSimGUI` (`ZephyrSimGUI.py`): GUI controller that wires callbacks to `MainWindowQt`, manages simulator UI state, sends outbound messages, and handles display updates.
-- `ZephyrSignalBus` (`ZephyrSignals.py`): Shared Qt signal bus (`log_message`, `zephyr_message`, `command_message`) used for decoupled communication between components.
-- `SerialProcessor` (`SerialProcessor.py`): Serial I/O processor that consumes `QSerialPort.readyRead` events, parses incoming log/XML/TM data, emits GUI signals, and writes session files.
+- `ConfigDialog` (`src/zephyrsim/ConfigDialog.py`): Startup/configuration dialog that manages saved config sets, opens selected serial ports, and returns the validated runtime config.
+- `MainWindowQt` (`src/zephyrsim/MainWindowQt.py`): Main application window (`QMainWindow`) with mode controls, command buttons, display filter controls, and log/output text panes.
+- `ZephyrSimGUI` (`src/zephyrsim/ZephyrSimGUI.py`): GUI controller that wires callbacks to `MainWindowQt`, manages simulator UI state, sends outbound messages, and handles display updates.
+- `ZephyrSignalBus` (`src/zephyrsim/ZephyrSignals.py`): Shared Qt signal bus (`log_message`, `zephyr_message`, `command_message`) used for decoupled communication between components.
+- `SerialProcessor` (`src/zephyrsim/SerialProcessor.py`): Serial I/O processor that consumes `QSerialPort.readyRead` events, parses incoming log/XML/TM data, emits GUI signals, and writes session files.
 
