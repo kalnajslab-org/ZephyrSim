@@ -5,15 +5,27 @@
 This repository contains a platform-independent, Python-based ZephyrSim for the CNES Strateole 2 campaign. This simulator adds the ability to receive and display debug messages from LASP instruments over the same serial connection as the XML-based Zephyr communications.
 
 ## Quickstart
-```sh
-pip3 install -e .
-Zephyrsim
-```
 
-Install directly from GitHub:
+Install as a Python module directly from GitHub:
 ```sh
 pip install "git+https://github.com/kalnajslab-org/ZephyrSim.git"
 zephyrsim
+```
+
+Install in editable mode from the local repository as a Python module and run:
+```sh
+pip3 install -e .
+zephyrsim
+```
+
+Run directly from the local repository without installing:
+```sh
+python3 ZephyrSim.py
+```
+
+Uninstall (if it was installed):
+```sh
+pip3 uninstall zephyrsim
 ```
 
 ## Interface
