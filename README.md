@@ -16,6 +16,14 @@ The first time that you run it you will get a popup from `SimplePythonGUI` askin
 
 See *requirements.txt* for python modules.
 
+## Class Summary
+
+- `ConfigDialog` (`ConfigDialog.py`): Startup/configuration dialog that manages saved config sets, opens selected serial ports, and returns the validated runtime config.
+- `MainWindowQt` (`MainWindowQt.py`): Main application window (`QMainWindow`) with mode controls, command buttons, display filter controls, and log/output text panes.
+- `ZephyrSimGUI` (`ZephyrSimGUI.py`): GUI controller that wires callbacks to `MainWindowQt`, manages simulator UI state, sends outbound messages, and handles display updates.
+- `ZephyrSignalBus` (`ZephyrSignals.py`): Shared Qt signal bus (`log_message`, `zephyr_message`, `command_message`) used for decoupled communication between components.
+- `SerialProcessor` (`SerialProcessor.py`): Serial I/O processor that consumes `QSerialPort.readyRead` events, parses incoming log/XML/TM data, emits GUI signals, and writes session files.
+
 ## Interface
 
 The simulator uses the `PySimpleGUI` library to provide multiple input and output windows that allow the user to interact with the instrument under test.
