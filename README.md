@@ -8,14 +8,14 @@ This repository contains a platform-independent, Python-based ZephyrSim for the 
 
 Install as a Python module directly from GitHub:
 ```sh
-pip install "git+https://github.com/kalnajslab-org/ZephyrSim.git"
-zephyrsim
+pip3 install "git+https://github.com/kalnajslab-org/ZephyrSim.git"
+ZephyrSim
 ```
 
 Install in editable mode from the local repository as a Python module and run:
 ```sh
 pip3 install -e .
-zephyrsim
+ZephyrSim
 ```
 
 Run directly from the local repository without installing:
