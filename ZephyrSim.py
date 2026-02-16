@@ -11,7 +11,7 @@ Modules:
     argparse
     os
 Functions:
-    FileSetup() -> None:
+    FileSetup() -> dict:
         Sets up the file structure and creates necessary files for the session.
     parse_args() -> argparse.Namespace:
         Parses command-line arguments.
@@ -45,19 +45,15 @@ import datetime
 # libraries
 import tracemalloc, gc, resource, time
 
-# globals
-instrument = ''
-inst_filename = ''
-xml_filename = ''
-cmd_filename = ''
-tm_dir = ''
-serial_processor = None
-
-def FileSetup(config:dict) -> None:
-    global inst_filename
-    global xml_filename
-    global cmd_filename
-    global tm_dir
+def FileSetup(config:dict) -> dict:
+    '''
+    Docstring for FileSetup
+    
+    :param config: Configuration dictionary containing session parameters.
+    :type config: dict
+    :return: Dictionary containing paths to created files and directories.
+    :rtype: dict[str, str]
+    '''
 
     # create date and time strings for file creation
     date, start_time, start_time_file, _ = SerialProcessor.GetDateTime()
@@ -66,7 +62,7 @@ def FileSetup(config:dict) -> None:
     data_dir = config['DataDirectory']+'/'
     if not os.path.exists(data_dir):
         os.mkdir(data_dir)
-    output_dir = data_dir + instrument + "_" + date + "T" + start_time_file
+    output_dir = data_dir + config['Instrument'] + "_" + date + "T" + start_time_file
     os.mkdir(output_dir)
 
     # create a directory for individual TM messages
@@ -74,20 +70,27 @@ def FileSetup(config:dict) -> None:
     os.mkdir(tm_dir)
 
     # create instrument output and command filenames
-    inst_filename = output_dir + "/" + instrument + "_DBG_" + date + "T" + start_time_file + ".txt"
-    xml_filename  = output_dir + "/" + instrument + "_XML_" + date + "T" + start_time_file + ".txt"
-    cmd_filename  = output_dir + "/" + instrument + "_CMD_" + date + "T" + start_time_file + ".txt"
+    inst_filename = output_dir + "/" + config['Instrument'] + "_DBG_" + date + "T" + start_time_file + ".txt"
+    xml_filename  = output_dir + "/" + config['Instrument'] + "_XML_" + date + "T" + start_time_file + ".txt"
+    cmd_filename  = output_dir + "/" + config['Instrument'] + "_CMD_" + date + "T" + start_time_file + ".txt"
 
     # create the files
     with open(inst_filename, "w") as inst:
-        inst.write(instrument + " Debug Messages: " + date + " at " + start_time + "\n\n")
+        inst.write(config['Instrument'] + " Debug Messages: " + date + " at " + start_time + "\n\n")
 
     with open(xml_filename, "w") as inst:
-        inst.write(instrument + " XML Messages: " + date + " at " + start_time + "\n\n")
+        inst.write(config['Instrument'] + " XML Messages: " + date + " at " + start_time + "\n\n")
 
     with open(cmd_filename, "w") as inst:
-        inst.write(instrument + " Commands: " + date + " at " + start_time + "\n\n")
+        inst.write(config['Instrument'] + " Commands: " + date + " at " + start_time + "\n\n")
 
+    return {
+        "output_dir": output_dir,
+        "tm_dir": tm_dir,
+        "inst_filename": inst_filename,
+        "xml_filename": xml_filename,
+        "cmd_filename": cmd_filename,
+    }
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -98,16 +101,11 @@ def parse_args() -> argparse.Namespace:
     return args
 
 def main() -> None:
-    global instrument
-    global serial_processor
 
     parse_args()
 
     app = QtWidgets.QApplication(sys.argv)
     app.setWindowIcon(QtGui.QIcon(":/icons/icon.svg"))
-
-    # get configuration
-    #config = ZephyrSimGUI.ConfigWindow()
 
     while True:
         dialog = ConfigDialog.ConfigDialog()
@@ -117,30 +115,38 @@ def main() -> None:
         else:
             sys.exit(0)
 
-    # set global variables
-    instrument = config['Instrument']
+    # set up the files and directories for the session
+    file_paths = FileSetup(config)
 
-    # set up the files and structure
-    FileSetup(config)
+    # create the signal bus for communication between the serial processor and the GUI
+    app_signals = ZephyrSignals.ZephyrSignalBus()
 
     # Create the main output window
-    signals = ZephyrSignals.ZephyrSignalBus()
-    guiManager = ZephyrSimGUI.ZephyrSimGUI(signals, config, logport=config['LogPort'], zephyrport=config['ZephyrPort'], cmd_fname=cmd_filename)
+    gui_manager = ZephyrSimGUI.ZephyrSimGUI(
+        app_signals,
+        config,
+        logport=config['LogPort'],
+        zephyrport=config['ZephyrPort'],
+        cmd_fname=file_paths["cmd_filename"],
+    )
 
-    # Set the tm filename
-    guiManager.set_tm_dir(tm_dir)
+    # Set the tm filename for display in the GUI and for writing individual 
+    # TM messages to the correct directory
+    gui_manager.set_tm_dir(file_paths["tm_dir"])
 
-    # start listening for instrument messages over serial via readyRead signals
-    obc_parser_args = (
-        signals,
-        config['LogPort'],
-        config['ZephyrPort'],
-        inst_filename,
-        xml_filename,
-        tm_dir,
-        instrument,
-        config)
-    serial_processor = SerialProcessor.SerialProcessor(*obc_parser_args)
+    # start listening for instrument messages over serial via readyRead signals.
+    # Set parent to the GUI manager window so that the object will have Qt lifetime 
+    # management and will be properly cleaned up when the GUI is closed.
+    SerialProcessor.SerialProcessor(
+        app_signals=app_signals,
+        logport=config['LogPort'],
+        zephyrport=config['ZephyrPort'],
+        inst_filename=file_paths["inst_filename"],
+        xml_filename=file_paths["xml_filename"],
+        tm_dir=file_paths["tm_dir"],
+        instrument=config['Instrument'],
+        shared_ports=config['SharedPorts'],
+        parent=gui_manager.window)
 
     sys.exit(app.exec())
 

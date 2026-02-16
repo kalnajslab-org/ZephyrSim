@@ -37,7 +37,7 @@ class SerialProcessor(QtCore.QObject):
         xml_filename: str,
         tm_dir: str,
         instrument: str,
-        config: dict,
+        shared_ports: bool,
         parent: Optional[QtCore.QObject] = None,
     ) -> None:
         super().__init__(parent)
@@ -48,7 +48,7 @@ class SerialProcessor(QtCore.QObject):
         self.xml_filename = xml_filename
         self.tm_dir = tm_dir
         self.instrument = instrument
-        self.port_sharing = bool(config["SharedPorts"])
+        self.port_sharing = shared_ports
 
         self._log_buffer = bytearray()
         self._zephyr_buffer = bytearray()
