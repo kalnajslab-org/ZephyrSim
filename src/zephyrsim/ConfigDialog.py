@@ -173,13 +173,19 @@ class ConfigDialog(QtWidgets.QDialog):
         form.addRow("Data directory:", data_dir_row)
 
         ports = _list_ports()
-        self.zephyr_port_combo = QtWidgets.QComboBox()
-        self.zephyr_port_combo.addItems(ports)
-        form.addRow("Zephyr port:", self.zephyr_port_combo)
+        self.zephyr_port_group_box = QtWidgets.QGroupBox("Zephyr port")
+        self.zephyr_port_group_layout = QtWidgets.QVBoxLayout(self.zephyr_port_group_box)
+        self.zephyr_port_button_group = QtWidgets.QButtonGroup(self)
+        self.zephyr_port_button_group.setExclusive(True)
+        self._set_zephyr_port_options(ports, "")
+        form.addRow(self.zephyr_port_group_box)
 
-        self.log_port_combo = QtWidgets.QComboBox()
-        self.log_port_combo.addItems(ports)
-        form.addRow("Log port:", self.log_port_combo)
+        self.log_port_group_box = QtWidgets.QGroupBox("Log port")
+        self.log_port_group_layout = QtWidgets.QVBoxLayout(self.log_port_group_box)
+        self.log_port_button_group = QtWidgets.QButtonGroup(self)
+        self.log_port_button_group.setExclusive(True)
+        self._set_log_port_options(ports, "")
+        form.addRow(self.log_port_group_box)
 
         root.addLayout(form)
 
@@ -202,6 +208,60 @@ class ConfigDialog(QtWidgets.QDialog):
             self.settings[name] = {}
         return self.settings[name]
 
+    def _set_zephyr_port_options(self, ports: list, selected: str) -> None:
+        while self.zephyr_port_group_layout.count():
+            item = self.zephyr_port_group_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                self.zephyr_port_button_group.removeButton(widget)
+                widget.deleteLater()
+
+        if not ports:
+            no_ports_label = QtWidgets.QLabel("No serial ports found")
+            self.zephyr_port_group_layout.addWidget(no_ports_label)
+            return
+
+        selected_port = selected if selected in ports else ports[0]
+        for port_name in ports:
+            radio = QtWidgets.QRadioButton(port_name)
+            self.zephyr_port_button_group.addButton(radio)
+            self.zephyr_port_group_layout.addWidget(radio)
+            if port_name == selected_port:
+                radio.setChecked(True)
+
+    def _current_zephyr_port(self) -> str:
+        selected_btn = self.zephyr_port_button_group.checkedButton()
+        if selected_btn is None:
+            return ""
+        return selected_btn.text().strip()
+
+    def _set_log_port_options(self, ports: list, selected: str) -> None:
+        while self.log_port_group_layout.count():
+            item = self.log_port_group_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                self.log_port_button_group.removeButton(widget)
+                widget.deleteLater()
+
+        if not ports:
+            no_ports_label = QtWidgets.QLabel("No serial ports found")
+            self.log_port_group_layout.addWidget(no_ports_label)
+            return
+
+        selected_port = selected if selected in ports else ports[0]
+        for port_name in ports:
+            radio = QtWidgets.QRadioButton(port_name)
+            self.log_port_button_group.addButton(radio)
+            self.log_port_group_layout.addWidget(radio)
+            if port_name == selected_port:
+                radio.setChecked(True)
+
+    def _current_log_port(self) -> str:
+        selected_btn = self.log_port_button_group.checkedButton()
+        if selected_btn is None:
+            return ""
+        return selected_btn.text().strip()
+
     def _save_current_widgets(self) -> None:
         name = self.config_combo.currentText()
         if not name:
@@ -212,8 +272,8 @@ class ConfigDialog(QtWidgets.QDialog):
         sec["AutoGPS"] = str(self.auto_gps_checkbox.isChecked())
         sec["WindowSize"] = self.window_size_combo.currentText()
         sec["DataDirectory"] = self.data_dir_edit.text().strip()
-        sec["ZephyrPort"] = self.zephyr_port_combo.currentText().strip()
-        sec["LogPort"] = self.log_port_combo.currentText().strip()
+        sec["ZephyrPort"] = self._current_zephyr_port()
+        sec["LogPort"] = self._current_log_port()
         if "MessageDisplayFilters" not in sec:
             sec["MessageDisplayFilters"] = json.dumps({msg_type: True for msg_type in message_display_types})
 
@@ -233,21 +293,17 @@ class ConfigDialog(QtWidgets.QDialog):
         self.data_dir_edit.setText(sec.get("DataDirectory", ""))
 
         ports = _list_ports()
-        for combo in (self.zephyr_port_combo, self.log_port_combo):
-            combo.clear()
-            combo.addItems(ports)
-
         zephyr_name = sec.get("ZephyrPort", "")
         log_name = sec.get("LogPort", "")
-        if zephyr_name and self.zephyr_port_combo.findText(zephyr_name) < 0:
-            self.zephyr_port_combo.addItem(zephyr_name)
-        if log_name and self.log_port_combo.findText(log_name) < 0:
-            self.log_port_combo.addItem(log_name)
+        zephyr_ports = list(ports)
+        if zephyr_name and zephyr_name not in zephyr_ports:
+            zephyr_ports.append(zephyr_name)
+        self._set_zephyr_port_options(zephyr_ports, zephyr_name)
 
-        z_idx = self.zephyr_port_combo.findText(zephyr_name)
-        l_idx = self.log_port_combo.findText(log_name)
-        self.zephyr_port_combo.setCurrentIndex(z_idx if z_idx >= 0 else 0)
-        self.log_port_combo.setCurrentIndex(l_idx if l_idx >= 0 else 0)
+        log_ports = list(ports)
+        if log_name and log_name not in log_ports:
+            log_ports.append(log_name)
+        self._set_log_port_options(log_ports, log_name)
 
     def _on_config_changed(self, new_name: str) -> None:
         if not new_name:

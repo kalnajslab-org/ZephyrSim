@@ -84,7 +84,7 @@ class MainWindowQt(QtWidgets.QMainWindow):
             mode_layout.addWidget(btn)
         top_row.addWidget(mode_group)
 
-        tc_group = QtWidgets.QGroupBox("TeleCommand")
+        tc_group = QtWidgets.QGroupBox("Telecommands")
         tc_layout = QtWidgets.QHBoxLayout(tc_group)
         self.tc_button = QtWidgets.QPushButton("TC")
         self._set_button_size(self.tc_button)
