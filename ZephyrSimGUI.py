@@ -24,9 +24,8 @@ import json
 import os
 from typing import Optional
 
-import serial
 import xmltodict
-from PyQt6 import QtCore, QtGui, QtWidgets
+from PyQt6 import QtCore, QtGui, QtSerialPort, QtWidgets
 
 import ZephyrSimUtils
 from ZephyrSignals import ZephyrSignalBus
@@ -148,8 +147,8 @@ class ZephyrSimGUI:
         self,
         signals: ZephyrSignalBus,
         config: dict,
-        logport: serial.Serial,
-        zephyrport: serial.Serial,
+        logport: Optional[QtSerialPort.QSerialPort],
+        zephyrport: QtSerialPort.QSerialPort,
         cmd_fname: str,
     ) -> None:
         self.config = config
@@ -172,9 +171,9 @@ class ZephyrSimGUI:
         self.signal_bus.command_message.connect(self._handle_command_message)
 
         if config["SharedPorts"]:
-            log_port_display_name = self.zephyr_port.name
+            log_port_display_name = self.zephyr_port.portName()
         else:
-            log_port_display_name = config["LogPort"].name
+            log_port_display_name = config["LogPort"].portName()
 
         self.window = MainWindowQt(
             config=config,
@@ -195,7 +194,7 @@ class ZephyrSimGUI:
             on_toggle_display=self.toggle_message_display_filter,
             on_close=self._on_window_close,
             log_port_display_name=log_port_display_name,
-            zephyr_port_display_name=self.zephyr_port.name,
+            zephyr_port_display_name=self.zephyr_port.portName(),
         )
         self.window.show()
         self.update_display_filter_buttons()
@@ -350,13 +349,13 @@ class ZephyrSimGUI:
     def serial_suspend(self) -> None:
         if not self.serial_suspended:
             self.zephyr_port.close()
-            if self.log_port and self.zephyr_port.name != self.log_port.name:
+            if self.log_port and self.zephyr_port.portName() != self.log_port.portName():
                 self.log_port.close()
             self.serial_suspended = True
         else:
-            self.zephyr_port.open()
-            if self.log_port and self.zephyr_port.name != self.log_port.name:
-                self.log_port.open()
+            self.zephyr_port.open(QtSerialPort.QSerialPort.OpenModeFlag.ReadWrite)
+            if self.log_port and self.zephyr_port.portName() != self.log_port.portName():
+                self.log_port.open(QtSerialPort.QSerialPort.OpenModeFlag.ReadWrite)
             self.serial_suspended = False
 
     def add_msg_to_xml_queue(self, msg: str) -> None:

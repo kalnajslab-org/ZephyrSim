@@ -6,10 +6,9 @@ opens serial ports for communication, and starts the main output window for the 
 instrument messages over serial and handles command responses.
 Modules:
     ZephyrSimGUI
-    ZephyrSimProcess
+    SerialProcessor
     ZephyrSimUtils
     argparse
-    threading
     os
 Functions:
     FileSetup() -> None:
@@ -36,14 +35,13 @@ if sys.version_info < (3, 9):
 # modules
 import ConfigDialog
 import ZephyrSimGUI
-import ZephyrSimProcess
+import SerialProcessor
 import ZephyrSimUtils
 import os
 import argparse
 import datetime
 
 # libraries
-import threading
 import tracemalloc, gc, resource, time
 
 # globals
@@ -52,6 +50,7 @@ inst_filename = ''
 xml_filename = ''
 cmd_filename = ''
 tm_dir = ''
+serial_processor = None
 
 def FileSetup(config:dict) -> None:
     global inst_filename
@@ -60,7 +59,7 @@ def FileSetup(config:dict) -> None:
     global tm_dir
 
     # create date and time strings for file creation
-    date, start_time, start_time_file, _ = ZephyrSimProcess.GetDateTime()
+    date, start_time, start_time_file, _ = SerialProcessor.GetDateTime()
 
     # create the output directory structure for the session
     data_dir = config['DataDirectory']+'/'
@@ -99,6 +98,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     global instrument
+    global serial_processor
 
     parse_args()
 
@@ -129,8 +129,8 @@ def main() -> None:
     # Set the tm filename
     guiManager.set_tm_dir(tm_dir)
 
-    # start listening for instrument messages over serial
-    obc_parser_args=(
+    # start listening for instrument messages over serial via readyRead signals
+    obc_parser_args = (
         signals,
         config['LogPort'],
         config['ZephyrPort'],
@@ -139,7 +139,7 @@ def main() -> None:
         tm_dir,
         instrument,
         config)
-    threading.Thread(target=ZephyrSimProcess.ReadInstrument,args=obc_parser_args).start()
+    serial_processor = SerialProcessor.SerialProcessor(*obc_parser_args)
 
     sys.exit(app.exec())
 

@@ -14,11 +14,11 @@ Command line usage:
 """
 
 import sys
-import serial # import Serial Library
 import xml.etree.ElementTree as ET #import XML library
 from xml.dom import minidom
 from datetime import datetime
 from time import sleep
+from PyQt6 import QtSerialPort
 
 msg_id_num = 1
 
@@ -56,7 +56,7 @@ def prettify(xmlStr: ET.Element) -> str:
     return reparsed.toprettyxml(indent=INDENT)
 
 
-def sendIM(instrument: str, InstrumentMode: str, filename: str, port: serial.Serial) -> str:
+def sendIM(instrument: str, InstrumentMode: str, filename: str, port: QtSerialPort.QSerialPort) -> str:
     global msg_id_num
 
     XML_IM = ET.Element('IM')
@@ -88,7 +88,7 @@ def sendIM(instrument: str, InstrumentMode: str, filename: str, port: serial.Ser
     return output
 
 
-def sendGPS(zenith: float, filename: str, port: serial.Serial) -> str:
+def sendGPS(zenith: float, filename: str, port: QtSerialPort.QSerialPort) -> str:
     global msg_id_num
 
     # The port might be suspended
@@ -144,7 +144,7 @@ def sendGPS(zenith: float, filename: str, port: serial.Serial) -> str:
     return output
 
 
-def sendTC(instrument: str, command: str, filename: str, port: serial.Serial) -> str:
+def sendTC(instrument: str, command: str, filename: str, port: QtSerialPort.QSerialPort) -> str:
     global msg_id_num
 
     XML_TC = ET.Element('TC')
@@ -182,7 +182,7 @@ def sendTC(instrument: str, command: str, filename: str, port: serial.Serial) ->
     return output
 
 
-def sendSAck(instrument: str, ACK: str, filename: str, port: serial.Serial) -> str:
+def sendSAck(instrument: str, ACK: str, filename: str, port: QtSerialPort.QSerialPort) -> str:
     global msg_id_num
 
     XML_TMAck = ET.Element('SAck')
@@ -213,7 +213,7 @@ def sendSAck(instrument: str, ACK: str, filename: str, port: serial.Serial) -> s
     return output
 
 
-def sendRAAck(instrument: str, ACK: str, filename: str, port: serial.Serial) -> str:
+def sendRAAck(instrument: str, ACK: str, filename: str, port: QtSerialPort.QSerialPort) -> str:
     global msg_id_num
 
     XML_RAAck = ET.Element('RAAck')
@@ -244,7 +244,7 @@ def sendRAAck(instrument: str, ACK: str, filename: str, port: serial.Serial) -> 
     return output
 
 
-def sendTMAck(instrument: str, ACK: str, filename: str, port: serial.Serial) -> str:
+def sendTMAck(instrument: str, ACK: str, filename: str, port: QtSerialPort.QSerialPort) -> str:
     global msg_id_num
 
     XML_TMAck = ET.Element('TMAck')
@@ -275,7 +275,7 @@ def sendTMAck(instrument: str, ACK: str, filename: str, port: serial.Serial) -> 
     return output
 
 
-def sendSW(instrument: str, filename: str, port: serial.Serial) -> str:
+def sendSW(instrument: str, filename: str, port: QtSerialPort.QSerialPort) -> str:
     global msg_id_num
 
     XML_TMAck = ET.Element('SW')
@@ -306,9 +306,26 @@ def sendSW(instrument: str, filename: str, port: serial.Serial) -> str:
 def listenFor(port: str, reply: str, terminator: bytes, time_out: int, filename: str) -> bool:
 
     print("Listening For: " + reply)
-    with serial.Serial(port, 115200, timeout=time_out) as ser:
-            line = ser.read_until(terminator,2000)
-            print(str(line))
+    ser = QtSerialPort.QSerialPort()
+    ser.setPortName(port)
+    ser.setBaudRate(115200)
+    ser.setDataBits(QtSerialPort.QSerialPort.DataBits.Data8)
+    ser.setParity(QtSerialPort.QSerialPort.Parity.NoParity)
+    ser.setStopBits(QtSerialPort.QSerialPort.StopBits.OneStop)
+    ser.setFlowControl(QtSerialPort.QSerialPort.FlowControl.NoFlowControl)
+    if not ser.open(QtSerialPort.QSerialPort.OpenModeFlag.ReadWrite):
+        print(f"Error opening port {port}: {ser.errorString()}")
+        return False
+
+    line = bytes()
+    deadline = datetime.now().timestamp() + float(time_out)
+    while datetime.now().timestamp() < deadline and not line.endswith(terminator):
+        if ser.waitForReadyRead(50):
+            line += bytes(ser.readAll())
+            if len(line) >= 2000:
+                break
+    ser.close()
+    print(str(line))
 
     if len(line) > 0:
         with open(filename, mode='a') as output_file:

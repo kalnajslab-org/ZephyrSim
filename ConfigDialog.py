@@ -6,9 +6,7 @@ import configparser
 import json
 import os
 
-import serial
-import serial.tools.list_ports
-from PyQt6 import QtWidgets
+from PyQt6 import QtSerialPort, QtWidgets
 
 
 window_sizes = ["Small", "Medium", "Large"]
@@ -95,8 +93,22 @@ def _bool_from_section(section: configparser.SectionProxy, key: str, default: bo
 
 
 def _list_ports() -> list:
-    ports = [port.device for port in serial.tools.list_ports.comports()]
+    ports = [port.portName() for port in QtSerialPort.QSerialPortInfo.availablePorts()]
     return [port for port in ports if "Bluetooth" not in port]
+
+
+def _open_serial_port(port_name: str) -> QtSerialPort.QSerialPort:
+    port = QtSerialPort.QSerialPort()
+    port.setPortName(port_name)
+    port.setBaudRate(115200)
+    port.setDataBits(QtSerialPort.QSerialPort.DataBits.Data8)
+    port.setParity(QtSerialPort.QSerialPort.Parity.NoParity)
+    port.setStopBits(QtSerialPort.QSerialPort.StopBits.OneStop)
+    port.setFlowControl(QtSerialPort.QSerialPort.FlowControl.NoFlowControl)
+    if not port.open(QtSerialPort.QSerialPort.OpenModeFlag.ReadWrite):
+        raise RuntimeError(f"{port_name}: {port.errorString()}")
+    port.clear(QtSerialPort.QSerialPort.Direction.Input)
+    return port
 
 
 class ConfigDialog(QtWidgets.QDialog):
@@ -316,11 +328,9 @@ class ConfigDialog(QtWidgets.QDialog):
             return
 
         try:
-            zephyr = serial.Serial(port=zephyr_port_name, baudrate=115200, timeout=0.001)
-            zephyr.reset_input_buffer()
+            zephyr = _open_serial_port(zephyr_port_name)
             if log_port_name != zephyr_port_name:
-                log = serial.Serial(port=log_port_name, baudrate=115200, timeout=0.001)
-                log.reset_input_buffer()
+                log = _open_serial_port(log_port_name)
                 shared_ports = False
             else:
                 log = None
