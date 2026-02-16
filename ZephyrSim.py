@@ -29,6 +29,7 @@ import sys
 import tracemalloc
 
 import ZephyrSignals
+import ZephyrSimResources_rc  # noqa: F401
 if sys.version_info < (3, 9):
     raise Exception("This script requires Python 3.9 or later. Please upgrade Python.")
 

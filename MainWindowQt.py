@@ -5,6 +5,7 @@ from typing import Callable, Dict, List, Tuple
 
 import pyperclip
 from PyQt6 import QtGui, QtWidgets
+import ZephyrSimResources_rc  # noqa: F401
 
 
 def _apply_button_colors(button: QtWidgets.QPushButton, fg: str, bg: str) -> None:
