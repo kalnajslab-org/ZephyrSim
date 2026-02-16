@@ -21,7 +21,7 @@ On startup, the user has the option to load a previously saved configuration or 
 The configuration includes the serial ports to use for Zephyr and debug communication, the instrument under test, 
 and whether to automatically respond with ACK messages.
 
-![Startup Configuration](Resources/ConfigureScreen.PNG)
+![Startup Configuration](Resources/ConfigureScreen.png)
 
 Example ports: (Windows) `COM3`, (Linux) `/dev/ttyUSB0`, (MacOS) `/dev/cu.usbmodem165659901`
 
@@ -33,7 +33,7 @@ Otherwise, the user must manually send these commands.
 
 The instrument Zephyr mode is selected in the _Mode Select_ box.
 
-![Mode Selection](Resources/ModeSelect.PNG)
+![Mode Selection](Resources/ModeSelect.png)
 
 ## Telecommands
 
@@ -41,7 +41,7 @@ The _TeleCommand_ box contains buttons for sending common telecommands to the in
 parameters, they are included as comma-separated values. The terminating semicolon is not entered; it is automatically appended 
 when the command is sent. Either press the TC button or hit Enter to send the command.
 
-![Telecommands](Resources/Telecommands.PNG)
+![Telecommands](Resources/Telecommands.png)
 
 ## Display Filters
 
@@ -50,7 +50,7 @@ The XML message types are based on the Zephyr XML message types. By default, all
 type will hide messages of that type from the Instrument Output window, but they will still be logged to the session files.
 The message filter selections are saved in the configuration and will persist across sessions. 
 
-![Display Filters](Resources/DisplayFilters.PNG)
+![Display Filters](Resources/DisplayFilters.png)
 
 ### Viewing Instrument Output
 
@@ -59,14 +59,14 @@ There are two windows viewing the instrument behavior: _StratoCore Log Messages_
 
 The _Messages_ window displays the complete communication between the Zephyr OBC and the instrument.
 
-![Messages Window](Resources/ZephyrMessages.PNG)
+![Messages Window](Resources/ZephyrMessages.png)
 
 The _Log Messages_ window displays the log messages that are received from the instrument over the Teensy USB serial port. 
 These messages are not part of the Zephyr communication, but are used for software development. Although
 these messages are still transmitted during remote flight operations, the serial port will not be connected to
 any devices.
 
-![Log Messages Window](Resources/LogMessages.PNG)
+![Log Messages Window](Resources/LogMessages.png)
 
 ## Log File Structure
 
@@ -112,3 +112,4 @@ sessions/
 - `ZephyrSimGUI` (`ZephyrSimGUI.py`): GUI controller that wires callbacks to `MainWindowQt`, manages simulator UI state, sends outbound messages, and handles display updates.
 - `ZephyrSignalBus` (`ZephyrSignals.py`): Shared Qt signal bus (`log_message`, `zephyr_message`, `command_message`) used for decoupled communication between components.
 - `SerialProcessor` (`SerialProcessor.py`): Serial I/O processor that consumes `QSerialPort.readyRead` events, parses incoming log/XML/TM data, emits GUI signals, and writes session files.
+
