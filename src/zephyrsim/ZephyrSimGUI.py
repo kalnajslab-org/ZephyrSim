@@ -45,8 +45,7 @@ ZephyrInstModes = [
 
 button_sizes = {"Small": (70, 28), "Medium": (84, 30), "Large": (96, 34)}
 
-MAXLOGLINES = 500
-KEEPLOGLINES = 250
+MAX_LOG_BLOCKS = 500
 
 message_display_types = ["TM", "TC", "IM", "TMAck", "GPS", "TCAck", "IMAck", "IMR"]
 
@@ -103,16 +102,12 @@ def NormalizeMessageDisplayFilters(filters) -> dict:
 
 
 def _apply_button_colors(button: QtWidgets.QPushButton, fg: str, bg: str) -> None:
-    button.setStyleSheet(f"QPushButton {{ color: {fg}; background-color: {bg}; }}")
-
-
-def _trim_text_edit(edit: QtWidgets.QTextEdit) -> None:
-    lines = edit.toPlainText().splitlines()
-    if len(lines) > MAXLOGLINES:
-        edit.setPlainText("\n".join(lines[-KEEPLOGLINES:]))
-        cursor = edit.textCursor()
-        cursor.movePosition(QtGui.QTextCursor.MoveOperation.End)
-        edit.setTextCursor(cursor)
+    color = QtGui.QColor(bg)
+    hover = color.lighter(125).name()
+    button.setStyleSheet(
+        f"QPushButton {{ color: {fg}; background-color: {bg}; }}"
+        f"QPushButton:hover {{ background-color: {hover}; }}"
+    )
 
 
 def _append_colored_text(edit: QtWidgets.QTextEdit, message: str, color_name: Optional[str]) -> None:
@@ -197,6 +192,8 @@ class ZephyrSimGUI:
             zephyr_port_display_name=self.zephyr_port.portName(),
         )
         self.window.show()
+        self.window.log_window.document().setMaximumBlockCount(MAX_LOG_BLOCKS)
+        self.window.zephyr_window.document().setMaximumBlockCount(MAX_LOG_BLOCKS)
         self.update_display_filter_buttons()
 
         # Run periodic AutoGPS checks in the Qt event loop.
@@ -243,8 +240,6 @@ class ZephyrSimGUI:
             return
         message = message.strip() + "\n"
 
-        _trim_text_edit(self.window.log_window)
-
         if "ERR: " in message:
             _append_colored_text(self.window.log_window, message, "red")
         else:
@@ -255,7 +250,6 @@ class ZephyrSimGUI:
             return
         if not self.should_display_message(message):
             return
-        _trim_text_edit(self.window.zephyr_window)
 
         if "(TO)" in message:
             _append_colored_text(self.window.zephyr_window, message, "blue")

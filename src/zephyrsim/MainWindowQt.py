@@ -8,8 +8,27 @@ from PyQt6 import QtGui, QtWidgets
 from . import ZephyrSimResources_rc  # noqa: F401
 
 
-def _apply_button_colors(button: QtWidgets.QPushButton, fg: str, bg: str) -> None:
-    button.setStyleSheet(f"QPushButton {{ color: {fg}; background-color: {bg}; }}")
+def _lighten(hex_color: str, factor: float = 0.25) -> str:
+    """Return a lightened version of a hex color string."""
+    c = QtGui.QColor(hex_color)
+    h, s, l, a = c.hslHueF(), c.hslSaturationF(), c.lightnessF(), c.alphaF()
+    c.setHslF(h, s, min(1.0, l + factor * (1.0 - l)), a)
+    return c.name()
+
+
+def _apply_button_colors(button: QtWidgets.QPushButton, fg: str, bg: str, checked_bg=None) -> None:
+    hover_bg = _lighten(bg)
+    style = (
+        f"QPushButton {{ color: {fg}; background-color: {bg}; }}"
+        f"QPushButton:hover {{ background-color: {hover_bg}; }}"
+    )
+    if checked_bg is not None:
+        checked_hover_bg = _lighten(checked_bg)
+        style += (
+            f"QPushButton:checked {{ background-color: {checked_bg}; color: white; }}"
+            f"QPushButton:checked:hover {{ background-color: {checked_hover_bg}; }}"
+        )
+    button.setStyleSheet(style)
 
 
 class MainWindowQt(QtWidgets.QMainWindow):
@@ -151,6 +170,7 @@ class MainWindowQt(QtWidgets.QMainWindow):
         display_layout = QtWidgets.QHBoxLayout(display_group)
         self.all_display_button = QtWidgets.QPushButton("All")
         self._set_button_size(self.all_display_button)
+        _apply_button_colors(self.all_display_button, "black", "#a0a0a0")
         self.all_display_button.clicked.connect(self.on_toggle_all_display)
         display_layout.addWidget(self.all_display_button)
 
@@ -159,6 +179,7 @@ class MainWindowQt(QtWidgets.QMainWindow):
             btn.setCheckable(True)
             btn.clicked.connect(lambda _=False, m=msg_type: self.on_toggle_display(m))
             self._set_button_size(btn)
+            _apply_button_colors(btn, "black", "#a0a0a0", checked_bg="#4a90d9")
             self.display_buttons[msg_type] = btn
             display_layout.addWidget(btn)
 
