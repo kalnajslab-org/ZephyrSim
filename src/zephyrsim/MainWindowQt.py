@@ -191,12 +191,14 @@ class MainWindowQt(QtWidgets.QMainWindow):
         log_layout = QtWidgets.QVBoxLayout(log_group)
         self.log_window = QtWidgets.QTextEdit()
         self.log_window.setReadOnly(True)
+        self.log_window.setLineWrapMode(QtWidgets.QTextEdit.LineWrapMode.NoWrap)
         log_layout.addWidget(self.log_window)
 
         zephyr_group = QtWidgets.QGroupBox(f"Messages TO/FROM {cfg['Instrument']}")
         zephyr_layout = QtWidgets.QVBoxLayout(zephyr_group)
         self.zephyr_window = QtWidgets.QTextEdit()
         self.zephyr_window.setReadOnly(True)
+        self.zephyr_window.setLineWrapMode(QtWidgets.QTextEdit.LineWrapMode.NoWrap)
         zephyr_layout.addWidget(self.zephyr_window)
 
         output_row.addWidget(log_group, 1)
