@@ -145,6 +145,7 @@ def main() -> None:
         tm_dir=file_paths["tm_dir"],
         instrument=config['Instrument'],
         shared_ports=config['SharedPorts'],
+        corrupt_serial=config.get('CorruptSerial', False),
         parent=gui_manager.window)
 
     sys.exit(app.exec())

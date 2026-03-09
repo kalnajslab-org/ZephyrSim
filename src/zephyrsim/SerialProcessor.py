@@ -6,6 +6,7 @@ messages through the shared Zephyr signal bus.
 # -*- coding: utf-8 -*-
 
 import datetime
+import random
 from typing import Optional
 
 import xmltodict
@@ -40,6 +41,7 @@ class SerialProcessor(QtCore.QObject):
         tm_dir: str,
         instrument: str,
         shared_ports: bool,
+        corrupt_serial: bool = False,
         parent: Optional[QtCore.QObject] = None,
     ) -> None:
         super().__init__(parent)
@@ -51,6 +53,7 @@ class SerialProcessor(QtCore.QObject):
         self.tm_dir = tm_dir
         self.instrument = instrument
         self.port_sharing = shared_ports
+        self.corrupt_serial = corrupt_serial
 
         self._log_buffer = bytearray()
         self._zephyr_buffer = bytearray()
@@ -99,22 +102,28 @@ class SerialProcessor(QtCore.QObject):
             tm_file.write(message.encode())
             tm_file.write(binary)
 
+    @staticmethod
+    def _xml_header(message: str) -> str:
+        """Return only the XML portion of a message (everything before START)."""
+        start_idx = message.find("START")
+        return message[:start_idx].strip() if start_idx >= 0 else message.strip()
+
     def _verify_crc(self, message: str) -> bool:
         crc_open = message.rfind("<CRC>")
         crc_close = message.rfind("</CRC>")
         if crc_open < 0 or crc_close < 0:
-            self.signals.diagnostics_message.emit(ERROR, "CRC error", f"Incoming message missing CRC tag: \n{message}")
+            self.signals.diagnostics_message.emit(ERROR, "CRC error", f"Missing CRC tag: {self._xml_header(message)}")
             return False
         content = message[:crc_open]
         try:
             expected = int(message[crc_open + 5:crc_close])
         except ValueError:
-            self.signals.diagnostics_message.emit(ERROR, "CRC error", f"Incoming message has non-numeric CRC value: \n{message}")
+            self.signals.diagnostics_message.emit(ERROR, "CRC error", f"Non-numeric CRC value: {self._xml_header(message)}")
             return False
         computed = ZephyrSimUtils.crc16_ccitt(0x1021, content.encode("ASCII"))
         if computed != expected:
             self.signals.diagnostics_message.emit(
-                ERROR, "CRC error", f"CRC mismatch: expected {expected}, computed {computed}\n{message}"
+                WARNING, f"CRC mismatch: expected {expected}, computed {computed}", self._xml_header(message)
             )
             return False
         return True
@@ -145,6 +154,25 @@ class SerialProcessor(QtCore.QObject):
 
         self._emit_zephyr_message(msg_dict)
 
+    def _verify_tm_binary_crc(self, binary: bytearray, header: str) -> None:
+        xml = self._xml_header(header)
+        if len(binary) < 10:
+            self.signals.diagnostics_message.emit(WARNING, "TM payload error", f"Binary too short to contain framing\n{xml}")
+            return
+        if binary[:5] != b'START' or binary[-3:] != b'END':
+            self.signals.diagnostics_message.emit(
+                WARNING, "TM payload error",
+                f"Framing invalid: starts={binary[:5]!r} ends={binary[-3:]!r}\n{xml}"
+            )
+            return
+        payload = binary[5:-5]
+        expected = int.from_bytes(binary[-5:-3], 'big')
+        computed = ZephyrSimUtils.crc16_ccitt(0x1021, bytes(payload))
+        if computed != expected:
+            self.signals.diagnostics_message.emit(
+                WARNING, "TM payload error", f"CRC mismatch: expected {expected}, computed {computed}\n{xml}"
+            )
+
     def _consume_pending_tm_if_ready(self) -> bool:
         if self._pending_tm_remaining <= 0:
             return False
@@ -156,6 +184,7 @@ class SerialProcessor(QtCore.QObject):
         del self._zephyr_buffer[:n_bytes]
 
         if self._pending_tm_header is not None:
+            self._verify_tm_binary_crc(self._pending_tm_binary, self._pending_tm_header)
             self._write_tm_file(self._pending_tm_header, bytes(self._pending_tm_binary))
             self.signals.command_message.emit("TMAck")
 
@@ -235,9 +264,9 @@ class SerialProcessor(QtCore.QObject):
             del self._log_buffer[: newline_idx + 1]
             self._emit_log_message(line.decode("ascii", errors="ignore"))
 
-    # TEMPORARY: drop one byte every N bytes to test CRC verification
+    # TEMPORARY: flip one bit every N bytes to test CRC verification
     _corrupt_counter = 0
-    _CORRUPT_EVERY = 200
+    _CORRUPT_EVERY = 2000
 
     def _corrupt_for_testing(self, data: bytes) -> bytes:
         result = bytearray(data)
@@ -245,15 +274,18 @@ class SerialProcessor(QtCore.QObject):
             SerialProcessor._corrupt_counter += 1
             if SerialProcessor._corrupt_counter >= self._CORRUPT_EVERY:
                 SerialProcessor._corrupt_counter = 0
-                del result[i]
+                if random.random() < 0.5:
+                    result[i] ^= 0x01  # flip LSB
+                else:
+                    del result[i]      # drop byte
                 return bytes(result)
         return bytes(result)
 
     def _on_zephyr_ready_read(self) -> None:
         raw = self.zephyr_port.readAll().data()
+        if self.corrupt_serial:
+            raw = self._corrupt_for_testing(raw)
         self._zephyr_buffer.extend(raw)
-        # For testing: randomly drop one byte every N bytes to simulate CRC and content errors.
-        # self._zephyr_buffer.extend(self._corrupt_for_testing(raw))
         self._process_zephyr_stream()
 
     def _on_shared_ready_read(self) -> None:

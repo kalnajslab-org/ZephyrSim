@@ -160,8 +160,10 @@ class ConfigDialog(QtWidgets.QDialog):
 
         self.auto_ack_checkbox = QtWidgets.QCheckBox("Automatically respond with ACKs")
         self.auto_gps_checkbox = QtWidgets.QCheckBox("Automatically send GPS")
+        self.corrupt_serial_checkbox = QtWidgets.QCheckBox("Simulate serial corruption (CRC testing)")
         form.addRow(self.auto_ack_checkbox)
         form.addRow(self.auto_gps_checkbox)
+        form.addRow(self.corrupt_serial_checkbox)
 
         data_dir_row = QtWidgets.QHBoxLayout()
         self.data_dir_edit = QtWidgets.QLineEdit()
@@ -270,6 +272,7 @@ class ConfigDialog(QtWidgets.QDialog):
         sec["Instrument"] = self.instrument_combo.currentText()
         sec["AutoAck"] = str(self.auto_ack_checkbox.isChecked())
         sec["AutoGPS"] = str(self.auto_gps_checkbox.isChecked())
+        sec["CorruptSerial"] = str(self.corrupt_serial_checkbox.isChecked())
         sec["WindowSize"] = self.window_size_combo.currentText()
         sec["DataDirectory"] = self.data_dir_edit.text().strip()
         sec["ZephyrPort"] = self._current_zephyr_port()
@@ -290,6 +293,7 @@ class ConfigDialog(QtWidgets.QDialog):
 
         self.auto_ack_checkbox.setChecked(_bool_from_section(sec, "AutoAck", True))
         self.auto_gps_checkbox.setChecked(_bool_from_section(sec, "AutoGPS", True))
+        self.corrupt_serial_checkbox.setChecked(_bool_from_section(sec, "CorruptSerial", False))
         self.data_dir_edit.setText(sec.get("DataDirectory", ""))
 
         ports = _list_ports()
@@ -412,6 +416,7 @@ class ConfigDialog(QtWidgets.QDialog):
             "Instrument": instrument_name,
             "AutoAck": _bool_from_section(sec, "AutoAck", True),
             "AutoGPS": _bool_from_section(sec, "AutoGPS", True),
+            "CorruptSerial": _bool_from_section(sec, "CorruptSerial", False),
             "WindowParams": window_params.get(window_size, window_params["Medium"]),
             "WindowSize": window_size,
             "DataDirectory": data_directory,
