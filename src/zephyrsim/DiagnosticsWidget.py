@@ -149,6 +149,10 @@ class DiagnosticsWidget(QtWidgets.QWidget):
         else:
             self._latest.setStyleSheet("")
 
+        # Alert the history button for warnings and errors.
+        if priority >= WARNING:
+            self._btn.setStyleSheet("color: red;")
+
         # Append timestamped summary + optional details to history.
         ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
         self._history.append(f"[{ts}] [{label}] {summary}\n", color)
@@ -162,6 +166,7 @@ class DiagnosticsWidget(QtWidgets.QWidget):
     def _show_history(self) -> None:
         self._latest.setText("")
         self._latest.setStyleSheet("")
+        self._btn.setStyleSheet("")
         self._history.show()
         self._history.raise_()
         self._history.activateWindow()
