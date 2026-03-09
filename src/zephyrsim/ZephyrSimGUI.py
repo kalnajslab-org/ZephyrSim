@@ -371,7 +371,6 @@ class ZephyrSimGUI:
         if cmd == "TMAck":
             msg = ZephyrSimUtils.sendTMAck(self.instrument, "ACK", self.cmd_filename, self.zephyr_port)
             self.add_msg_to_xml_queue(msg)
-            self.add_debug_msg(timestring + "Sent TMAck")
         elif cmd == "SAck":
             msg = ZephyrSimUtils.sendSAck(self.instrument, "ACK", self.cmd_filename, self.zephyr_port)
             self.add_msg_to_xml_queue(msg)
