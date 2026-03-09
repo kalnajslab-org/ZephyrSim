@@ -6,28 +6,13 @@ from typing import Callable, Dict, List, Tuple
 import pyperclip
 from PyQt6 import QtGui, QtWidgets
 from . import ZephyrSimResources_rc  # noqa: F401
+from .DiagnosticsWidget import DiagnosticsWidget
 
 
-def _lighten(hex_color: str, factor: float = 0.25) -> str:
-    """Return a lightened version of a hex color string."""
-    c = QtGui.QColor(hex_color)
-    h, s, l, a = c.hslHueF(), c.hslSaturationF(), c.lightnessF(), c.alphaF()
-    c.setHslF(h, s, min(1.0, l + factor * (1.0 - l)), a)
-    return c.name()
-
-
-def _apply_button_colors(button: QtWidgets.QPushButton, fg: str, bg: str, checked_bg=None) -> None:
-    hover_bg = _lighten(bg)
-    style = (
-        f"QPushButton {{ color: {fg}; background-color: {bg}; }}"
-        f"QPushButton:hover {{ background-color: {hover_bg}; }}"
-    )
-    if checked_bg is not None:
-        checked_hover_bg = _lighten(checked_bg)
-        style += (
-            f"QPushButton:checked {{ background-color: {checked_bg}; color: white; }}"
-            f"QPushButton:checked:hover {{ background-color: {checked_hover_bg}; }}"
-        )
+def _set_text_color(button: QtWidgets.QPushButton, color: str, checked_color: str = "") -> None:
+    style = f"QPushButton {{ color: {color}; }}"
+    if checked_color:
+        style += f"QPushButton:checked {{ color: {checked_color}; font-weight: bold; }}"
     button.setStyleSheet(style)
 
 
@@ -98,7 +83,7 @@ class MainWindowQt(QtWidgets.QMainWindow):
             btn = QtWidgets.QPushButton(mode)
             btn.setToolTip(tip)
             self._set_button_size(btn)
-            _apply_button_colors(btn, "black", "lightblue")
+            _set_text_color(btn, "steelblue")
             btn.clicked.connect(lambda _=False, m=mode: self.on_mode(m))
             mode_layout.addWidget(btn)
         top_row.addWidget(mode_group)
@@ -107,7 +92,7 @@ class MainWindowQt(QtWidgets.QMainWindow):
         tc_layout = QtWidgets.QHBoxLayout(tc_group)
         self.tc_button = QtWidgets.QPushButton("TC")
         self._set_button_size(self.tc_button)
-        _apply_button_colors(self.tc_button, "black", "green")
+        _set_text_color(self.tc_button, "darkgreen")
         self.tc_button.setToolTip("Send Telecommand")
         self.tc_button.clicked.connect(self.on_tc)
         self.tc_input = QtWidgets.QLineEdit()
@@ -122,7 +107,7 @@ class MainWindowQt(QtWidgets.QMainWindow):
         sza_layout = QtWidgets.QHBoxLayout(sza_group)
         self.gps_button = QtWidgets.QPushButton("GPS")
         self._set_button_size(self.gps_button)
-        _apply_button_colors(self.gps_button, "black", "green")
+        _set_text_color(self.gps_button, "darkgreen")
         self.gps_button.setToolTip("Send GPS")
         self.gps_button.clicked.connect(self.on_gps)
         self.gps_input = QtWidgets.QLineEdit("120.0")
@@ -153,10 +138,10 @@ class MainWindowQt(QtWidgets.QMainWindow):
         behavior_layout = QtWidgets.QHBoxLayout(behavior_group)
         self.suspend_button = QtWidgets.QPushButton("Suspend")
         self.suspend_button.setToolTip("Suspend/Resume serial ports")
-        _apply_button_colors(self.suspend_button, "white", "orange")
+        _set_text_color(self.suspend_button, "darkorange")
         self.suspend_button.clicked.connect(self._toggle_suspend)
         self.exit_button = QtWidgets.QPushButton("Exit")
-        _apply_button_colors(self.exit_button, "white", "red")
+        _set_text_color(self.exit_button, "red")
         self.exit_button.setToolTip("Exit the application")
         self.exit_button.clicked.connect(self.on_exit)
         behavior_layout.addWidget(self.suspend_button)
@@ -170,7 +155,6 @@ class MainWindowQt(QtWidgets.QMainWindow):
         display_layout = QtWidgets.QHBoxLayout(display_group)
         self.all_display_button = QtWidgets.QPushButton("All")
         self._set_button_size(self.all_display_button)
-        _apply_button_colors(self.all_display_button, "black", "#a0a0a0")
         self.all_display_button.clicked.connect(self.on_toggle_all_display)
         display_layout.addWidget(self.all_display_button)
 
@@ -179,7 +163,6 @@ class MainWindowQt(QtWidgets.QMainWindow):
             btn.setCheckable(True)
             btn.clicked.connect(lambda _=False, m=msg_type: self.on_toggle_display(m))
             self._set_button_size(btn)
-            _apply_button_colors(btn, "black", "#a0a0a0", checked_bg="#4a90d9")
             self.display_buttons[msg_type] = btn
             display_layout.addWidget(btn)
 
@@ -214,32 +197,39 @@ class MainWindowQt(QtWidgets.QMainWindow):
         config_row.addStretch(1)
         root.addLayout(config_row)
 
-        tm_row = QtWidgets.QHBoxLayout()
-        tm_row.addWidget(QtWidgets.QLabel("TM directory"))
+        bottom_group = QtWidgets.QGroupBox()
+        bottom_row = QtWidgets.QHBoxLayout(bottom_group)
+
+        bottom_row.addWidget(QtWidgets.QLabel("Diagnostics"))
+        self.diagnostics_widget = DiagnosticsWidget("Diagnostics")
+        bottom_row.addWidget(self.diagnostics_widget, 1)
+
+        bottom_row.addWidget(QtWidgets.QLabel("TM directory"))
         self.tm_directory = QtWidgets.QLineEdit(" ")
         self.tm_directory.setReadOnly(True)
-        tm_row.addWidget(self.tm_directory, 1)
+        bottom_row.addWidget(self.tm_directory, 1)
         self.copy_tm_btn = QtWidgets.QPushButton("Copy")
-        _apply_button_colors(self.copy_tm_btn, "white", "blue")
+        _set_text_color(self.copy_tm_btn, "royalblue")
         self.copy_tm_btn.clicked.connect(self._copy_tm_directory)
-        tm_row.addWidget(self.copy_tm_btn)
-        root.addLayout(tm_row)
+        bottom_row.addWidget(self.copy_tm_btn)
+
+        root.addWidget(bottom_group)
 
         self.setCentralWidget(central)
         self.resize(cfg["WindowParams"]["width"] * 10, cfg["WindowParams"]["height"] * 26)
 
     def _set_button_size(self, btn: QtWidgets.QPushButton) -> None:
-        w, h = self.button_sizes.get(self.window_size, self.button_sizes["Medium"])
-        btn.setFixedSize(w, h)
+        w, _ = self.button_sizes.get(self.window_size, self.button_sizes["Medium"])
+        btn.setMaximumWidth(w)
 
     def _toggle_suspend(self) -> None:
         suspended = self.on_toggle_suspend()
         if suspended:
             self.suspend_button.setText("Resume")
-            _apply_button_colors(self.suspend_button, "white", "blue")
+            _set_text_color(self.suspend_button, "royalblue")
         else:
             self.suspend_button.setText("Suspend")
-            _apply_button_colors(self.suspend_button, "white", "orange")
+            _set_text_color(self.suspend_button, "darkorange")
 
     def _copy_tm_directory(self) -> None:
         pyperclip.copy(self.tm_directory.text())

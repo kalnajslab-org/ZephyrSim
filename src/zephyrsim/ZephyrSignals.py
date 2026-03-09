@@ -10,3 +10,4 @@ class ZephyrSignalBus(QtCore.QObject):
     log_message = QtCore.pyqtSignal(str)
     zephyr_message = QtCore.pyqtSignal(str)
     command_message = QtCore.pyqtSignal(str)
+    diagnostics_message = QtCore.pyqtSignal(int, str)

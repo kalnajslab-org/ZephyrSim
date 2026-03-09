@@ -12,6 +12,7 @@ import xmltodict
 from PyQt6 import QtCore, QtSerialPort
 
 from . import ZephyrSignals
+from .DiagnosticsWidget import ERROR
 
 
 def GetDateTime() -> tuple:
@@ -101,8 +102,7 @@ class SerialProcessor(QtCore.QObject):
         try:
             msg_dict = xmltodict.parse(f"<XMLTOKEN>{message}</XMLTOKEN>")
         except Exception as exc:
-            print("Error parsing XML,", exc)
-            print("Message:", message)
+            self.signals.diagnostics_message.emit(ERROR, f"Error parsing XML: {exc} — message: {message}")
             return
 
         msg_type = list(msg_dict["XMLTOKEN"].keys())[0]
@@ -112,7 +112,7 @@ class SerialProcessor(QtCore.QObject):
                 self._pending_tm_binary = bytearray()
                 self._pending_tm_header = message
             except Exception as exc:
-                print("Error parsing TM length,", exc)
+                self.signals.diagnostics_message.emit(ERROR, f"Error parsing TM length: {exc}")
                 self._pending_tm_remaining = 0
                 self._pending_tm_binary = bytearray()
                 self._pending_tm_header = None

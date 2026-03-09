@@ -31,6 +31,7 @@ from . import ZephyrSimUtils
 from .ZephyrSignals import ZephyrSignalBus
 from .ConfigDialog import ConfigDialog
 from .MainWindowQt import MainWindowQt
+from .DiagnosticsWidget import INFO, ERROR
 
 # Perhaps this should be a configuration option
 DEFAULT_SZA = 120
@@ -101,13 +102,8 @@ def NormalizeMessageDisplayFilters(filters) -> dict:
     return normalized
 
 
-def _apply_button_colors(button: QtWidgets.QPushButton, fg: str, bg: str) -> None:
-    color = QtGui.QColor(bg)
-    hover = color.lighter(125).name()
-    button.setStyleSheet(
-        f"QPushButton {{ color: {fg}; background-color: {bg}; }}"
-        f"QPushButton:hover {{ background-color: {hover}; }}"
-    )
+def _set_text_color(button: QtWidgets.QPushButton, color: str) -> None:
+    button.setStyleSheet(f"QPushButton {{ color: {color}; }}")
 
 
 def _append_colored_text(edit: QtWidgets.QTextEdit, message: str, color_name: Optional[str]) -> None:
@@ -194,6 +190,7 @@ class ZephyrSimGUI:
         self.window.show()
         self.window.log_window.document().setMaximumBlockCount(MAX_LOG_BLOCKS)
         self.window.zephyr_window.document().setMaximumBlockCount(MAX_LOG_BLOCKS)
+        self.signal_bus.diagnostics_message.connect(self.window.diagnostics_widget.receive_message)
         self.update_display_filter_buttons()
 
         # Run periodic AutoGPS checks in the Qt event loop.
@@ -263,21 +260,18 @@ class ZephyrSimGUI:
             _append_colored_text(self.window.zephyr_window, message, None)
 
     def add_debug_msg(self, message: str, error: bool = False) -> None:
-        if error:
-            print("ERROR:", message)
-        else:
-            print(message)
+        priority = ERROR if error else INFO
+        self.signal_bus.diagnostics_message.emit(priority, message)
 
     def tc_message(self) -> None:
         if self.serial_suspended or self.window is None:
             return
-        timestring = _formatted_timestamp()
         tc_text = self.window.tc_input.text() + ";"
         if tc_text == ";":
             QtWidgets.QMessageBox.warning(self.window, "Input Error", "TC text must not be empty")
             return
 
-        print(timestring + "Sending TC:", tc_text)
+        self.add_debug_msg(f"Sending TC: {tc_text}")
         msg = ZephyrSimUtils.sendTC(self.instrument, tc_text, self.cmd_filename, self.zephyr_port)
         self.add_msg_to_xml_queue(msg)
 
@@ -295,39 +289,34 @@ class ZephyrSimGUI:
             QtWidgets.QMessageBox.warning(self.window, "Input Error", "SZA must be a float")
             return
 
-        timestring = _formatted_timestamp()
-        print(timestring + "Sending GPS, SZA =", str(parsed_sza))
+        self.add_debug_msg(f"Sending GPS, SZA = {parsed_sza}")
         msg = ZephyrSimUtils.sendGPS(parsed_sza, self.cmd_filename, self.zephyr_port)
         self.add_msg_to_xml_queue(msg)
 
     def sw_message(self) -> None:
         if self.serial_suspended or self.window is None:
             return
-        timestring = _formatted_timestamp()
-        print(timestring + "Sending shutdown warning")
+        self.add_debug_msg("Sending shutdown warning")
         ZephyrSimUtils.sendSW(self.instrument, self.cmd_filename, self.zephyr_port)
 
     def sack_message(self) -> None:
         if self.serial_suspended:
             return
-        timestring = _formatted_timestamp()
-        print(timestring + "Sending safety ack")
+        self.add_debug_msg("Sending safety ack")
         msg = ZephyrSimUtils.sendSAck(self.instrument, "ACK", self.cmd_filename, self.zephyr_port)
         self.add_msg_to_xml_queue(msg)
 
     def raack_message(self) -> None:
         if self.serial_suspended:
             return
-        timestring = _formatted_timestamp()
-        print(timestring + "Sent RAAck")
+        self.add_debug_msg("Sent RAAck")
         msg = ZephyrSimUtils.sendRAAck(self.instrument, "ACK", self.cmd_filename, self.zephyr_port)
         self.add_msg_to_xml_queue(msg)
 
     def tmack_message(self) -> None:
         if self.serial_suspended:
             return
-        timestring = _formatted_timestamp()
-        print(timestring + "Sending TM ack")
+        self.add_debug_msg("Sending TM ack")
         msg = ZephyrSimUtils.sendTMAck(self.instrument, "ACK", self.cmd_filename, self.zephyr_port)
         self.add_msg_to_xml_queue(msg)
 
@@ -404,16 +393,6 @@ class ZephyrSimGUI:
                 return False
         return True
 
-    @staticmethod
-    def get_display_button_color(msg_type: str, enabled: bool) -> tuple[str, str]:
-        if not enabled:
-            return ("white", "gray")
-        if msg_type in ("IMAck", "IMR", "TCAck"):
-            return ("white", "black")
-        if msg_type in ("GPS", "TC", "IM", "TMAck"):
-            return ("white", "blue")
-        return ("black", "green")
-
     def update_display_filter_buttons(self) -> None:
         if self.window is None:
             return
@@ -421,15 +400,13 @@ class ZephyrSimGUI:
             enabled = self.message_display_filters[msg_type]
             btn = self.window.display_buttons[msg_type]
             btn.setChecked(enabled)
-            fg, bg = self.get_display_button_color(msg_type, enabled)
-            _apply_button_colors(btn, fg, bg)
 
         if all(self.message_display_filters.values()):
-            _apply_button_colors(self.window.all_display_button, "black", "green")
+            _set_text_color(self.window.all_display_button, "darkgreen")
         elif any(self.message_display_filters.values()):
-            _apply_button_colors(self.window.all_display_button, "black", "orange")
+            _set_text_color(self.window.all_display_button, "darkorange")
         else:
-            _apply_button_colors(self.window.all_display_button, "white", "gray")
+            _set_text_color(self.window.all_display_button, "gray")
 
     def toggle_message_display_filter(self, msg_type: str) -> None:
         self.message_display_filters[msg_type] = not self.message_display_filters[msg_type]
