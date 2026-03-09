@@ -419,9 +419,4 @@ class ConfigDialog(QtWidgets.QDialog):
             "MessageDisplayFilters": msg_display_filters,
         }
 
-        print("Instrument:", self.result_config["Instrument"])
-        print("Zephyr Port:", self.result_config["ZephyrPort"])
-        print("Log Port:", self.result_config["LogPort"])
-        print("AutoAck:", self.result_config["AutoAck"])
-
         self.accept()

@@ -191,6 +191,10 @@ class ZephyrSimGUI:
         self.window.log_window.document().setMaximumBlockCount(MAX_LOG_BLOCKS)
         self.window.zephyr_window.document().setMaximumBlockCount(MAX_LOG_BLOCKS)
         self.signal_bus.diagnostics_message.connect(self.window.diagnostics_widget.receive_message)
+        self.add_debug_msg(f"Instrument: {config['Instrument']}")
+        self.add_debug_msg(f"Zephyr Port: {self.zephyr_port.portName()}")
+        self.add_debug_msg(f"Log Port: {log_port_display_name}")
+        self.add_debug_msg(f"AutoAck: {config['AutoAck']}")
         self.update_display_filter_buttons()
 
         # Run periodic AutoGPS checks in the Qt event loop.
