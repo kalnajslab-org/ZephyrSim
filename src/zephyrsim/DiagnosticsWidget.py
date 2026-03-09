@@ -115,9 +115,11 @@ class DiagnosticsWidget(QtWidgets.QWidget):
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self._latest = QtWidgets.QLineEdit()
-        self._latest.setReadOnly(True)
-        self._latest.setPlaceholderText("No messages yet")
+        self._latest = QtWidgets.QLabel("No messages yet")
+        self._latest.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Preferred,
+        )
         layout.addWidget(self._latest, 1)
 
         self._btn = QtWidgets.QPushButton("History")
@@ -129,32 +131,37 @@ class DiagnosticsWidget(QtWidgets.QWidget):
     # Slot
     # ------------------------------------------------------------------
 
-    @QtCore.pyqtSlot(int, str)
-    def receive_message(self, priority: int, message: str) -> None:
-        """Display *message* at the given *priority* level.
+    @QtCore.pyqtSlot(int, str, str)
+    def receive_message(self, priority: int, summary: str, details: str = "") -> None:
+        """Display a message at the given *priority* level.
 
         :param priority: One of :data:`INFO`, :data:`WARNING`, :data:`ERROR`.
-        :param message: The text to display.
+        :param summary: Short summary shown in the main label.
+        :param details: Optional detail line shown only in history.
         """
         color = _COLORS.get(priority)
         label = _LABELS.get(priority, "???")
 
-        # Update the single-line display.
-        self._latest.setText(f"[{label}] {message}")
+        # Update the single-line display with summary only.
+        self._latest.setText(f"[{label}] {summary}")
         if color:
             self._latest.setStyleSheet(f"color: {color};")
         else:
             self._latest.setStyleSheet("")
 
-        # Append a timestamped entry to the history.
+        # Append timestamped summary + optional details to history.
         ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        self._history.append(f"[{ts}] [{label}] {message}\n", color)
+        self._history.append(f"[{ts}] [{label}] {summary}\n", color)
+        if details:
+            self._history.append(f"    {details}\n", color)
 
     # ------------------------------------------------------------------
     # Private
     # ------------------------------------------------------------------
 
     def _show_history(self) -> None:
+        self._latest.setText("")
+        self._latest.setStyleSheet("")
         self._history.show()
         self._history.raise_()
         self._history.activateWindow()

@@ -263,9 +263,9 @@ class ZephyrSimGUI:
         else:
             _append_colored_text(self.window.zephyr_window, message, None)
 
-    def add_debug_msg(self, message: str, error: bool = False) -> None:
+    def add_debug_msg(self, summary: str, details: str = "", error: bool = False) -> None:
         priority = ERROR if error else INFO
-        self.signal_bus.diagnostics_message.emit(priority, message)
+        self.signal_bus.diagnostics_message.emit(priority, summary, details)
 
     def tc_message(self) -> None:
         if self.serial_suspended or self.window is None:
@@ -380,7 +380,7 @@ class ZephyrSimGUI:
             self.add_msg_to_xml_queue(msg)
             self.add_debug_msg(timestring + "Sent RAAck")
         else:
-            self.add_debug_msg("Unknown command", True)
+            self.add_debug_msg("Unknown command", error=True)
 
     def set_tm_dir(self, filename: str) -> None:
         if self.window is not None:

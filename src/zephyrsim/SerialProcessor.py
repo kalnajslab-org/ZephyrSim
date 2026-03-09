@@ -12,7 +12,8 @@ import xmltodict
 from PyQt6 import QtCore, QtSerialPort
 
 from . import ZephyrSignals
-from .DiagnosticsWidget import ERROR
+from .DiagnosticsWidget import ERROR, WARNING
+from . import ZephyrSimUtils
 
 
 def GetDateTime() -> tuple:
@@ -98,11 +99,32 @@ class SerialProcessor(QtCore.QObject):
             tm_file.write(message.encode())
             tm_file.write(binary)
 
+    def _verify_crc(self, message: str) -> bool:
+        crc_open = message.rfind("<CRC>")
+        crc_close = message.rfind("</CRC>")
+        if crc_open < 0 or crc_close < 0:
+            self.signals.diagnostics_message.emit(ERROR, "CRC error", f"Incoming message missing CRC tag: \n{message}")
+            return False
+        content = message[:crc_open]
+        try:
+            expected = int(message[crc_open + 5:crc_close])
+        except ValueError:
+            self.signals.diagnostics_message.emit(ERROR, "CRC error", f"Incoming message has non-numeric CRC value: \n{message}")
+            return False
+        computed = ZephyrSimUtils.crc16_ccitt(0x1021, content.encode("ASCII"))
+        if computed != expected:
+            self.signals.diagnostics_message.emit(
+                ERROR, "CRC error", f"CRC mismatch: expected {expected}, computed {computed}\n{message}"
+            )
+            return False
+        return True
+
     def _start_or_emit_from_xml(self, message: str) -> None:
+        self._verify_crc(message)
         try:
             msg_dict = xmltodict.parse(f"<XMLTOKEN>{message}</XMLTOKEN>")
         except Exception as exc:
-            self.signals.diagnostics_message.emit(ERROR, f"Error parsing XML: {exc} — message: {message}")
+            self.signals.diagnostics_message.emit(ERROR, "Error parsing XML", f"{exc}\n{message}")
             return
 
         msg_type = list(msg_dict["XMLTOKEN"].keys())[0]
@@ -112,7 +134,7 @@ class SerialProcessor(QtCore.QObject):
                 self._pending_tm_binary = bytearray()
                 self._pending_tm_header = message
             except Exception as exc:
-                self.signals.diagnostics_message.emit(ERROR, f"Error parsing TM length: {exc}")
+                self.signals.diagnostics_message.emit(ERROR, "Error parsing TM length", f"{exc}\n{message}")
                 self._pending_tm_remaining = 0
                 self._pending_tm_binary = bytearray()
                 self._pending_tm_header = None
@@ -213,8 +235,25 @@ class SerialProcessor(QtCore.QObject):
             del self._log_buffer[: newline_idx + 1]
             self._emit_log_message(line.decode("ascii", errors="ignore"))
 
+    # TEMPORARY: drop one byte every N bytes to test CRC verification
+    _corrupt_counter = 0
+    _CORRUPT_EVERY = 200
+
+    def _corrupt_for_testing(self, data: bytes) -> bytes:
+        result = bytearray(data)
+        for i in range(len(result)):
+            SerialProcessor._corrupt_counter += 1
+            if SerialProcessor._corrupt_counter >= self._CORRUPT_EVERY:
+                SerialProcessor._corrupt_counter = 0
+                del result[i]
+                return bytes(result)
+        return bytes(result)
+
     def _on_zephyr_ready_read(self) -> None:
-        self._zephyr_buffer.extend(bytes(self.zephyr_port.readAll()))
+        raw = self.zephyr_port.readAll().data()
+        self._zephyr_buffer.extend(raw)
+        # For testing: randomly drop one byte every N bytes to simulate CRC and content errors.
+        # self._zephyr_buffer.extend(self._corrupt_for_testing(raw))
         self._process_zephyr_stream()
 
     def _on_shared_ready_read(self) -> None:

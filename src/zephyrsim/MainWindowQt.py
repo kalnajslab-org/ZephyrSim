@@ -207,7 +207,7 @@ class MainWindowQt(QtWidgets.QMainWindow):
         bottom_row.addWidget(QtWidgets.QLabel("TM directory"))
         self.tm_directory = QtWidgets.QLineEdit(" ")
         self.tm_directory.setReadOnly(True)
-        bottom_row.addWidget(self.tm_directory, 1)
+        bottom_row.addWidget(self.tm_directory, 2)
         self.copy_tm_btn = QtWidgets.QPushButton("Copy")
         _set_text_color(self.copy_tm_btn, "royalblue")
         self.copy_tm_btn.clicked.connect(self._copy_tm_directory)
