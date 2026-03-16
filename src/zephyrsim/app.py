@@ -127,6 +127,7 @@ def main() -> None:
         logport=config['LogPort'],
         zephyrport=config['ZephyrPort'],
         cmd_fname=file_paths["cmd_filename"],
+        dbg_fname=file_paths["inst_filename"],
     )
 
     # Set the tm filename for display in the GUI and for writing individual 

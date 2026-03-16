@@ -31,7 +31,7 @@ from . import ZephyrSimUtils
 from .ZephyrSignals import ZephyrSignalBus
 from .ConfigDialog import ConfigDialog
 from .MainWindowQt import MainWindowQt
-from .DiagnosticsWidget import INFO, ERROR
+from .DiagnosticsWidget import INFO, ERROR, _LABELS
 
 # Perhaps this should be a configuration option
 DEFAULT_SZA = 120
@@ -141,11 +141,13 @@ class ZephyrSimGUI:
         logport: Optional[QtSerialPort.QSerialPort],
         zephyrport: QtSerialPort.QSerialPort,
         cmd_fname: str,
+        dbg_fname: str = "",
     ) -> None:
         self.config = config
         self.log_port = logport
         self.zephyr_port = zephyrport
         self.cmd_filename = cmd_fname
+        self.dbg_filename = dbg_fname
         self.instrument = config["Instrument"]
         self.active_config_set = config["ConfigSet"]
         self.window_size = config.get("WindowSize", "Medium")
@@ -191,6 +193,7 @@ class ZephyrSimGUI:
         self.window.log_window.document().setMaximumBlockCount(MAX_LOG_BLOCKS)
         self.window.zephyr_window.document().setMaximumBlockCount(MAX_LOG_BLOCKS)
         self.signal_bus.diagnostics_message.connect(self.window.diagnostics_widget.receive_message)
+        self.signal_bus.diagnostics_message.connect(self._log_diagnostic_message)
         self.add_debug_msg(f"Instrument: {config['Instrument']}")
         self.add_debug_msg(f"Zephyr Port: {self.zephyr_port.portName()}")
         self.add_debug_msg(f"Log Port: {log_port_display_name}")
@@ -262,6 +265,17 @@ class ZephyrSimGUI:
             _append_colored_text(self.window.zephyr_window, message, "green")
         else:
             _append_colored_text(self.window.zephyr_window, message, None)
+
+    def _log_diagnostic_message(self, priority: int, summary: str, details: str) -> None:
+        if not self.dbg_filename:
+            return
+        label = _LABELS.get(priority, "???")
+        line = f"DIAGNOSTIC: [{label}] {summary}"
+        if details:
+            line += f" — {details}"
+        ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        with open(self.dbg_filename, "a") as f:
+            f.write(f"[{ts}] {line}\n")
 
     def add_debug_msg(self, summary: str, details: str = "", error: bool = False) -> None:
         priority = ERROR if error else INFO
