@@ -7,6 +7,7 @@ import pyperclip
 from PyQt6 import QtGui, QtWidgets
 from . import ZephyrSimResources_rc  # noqa: F401
 from .DiagnosticsWidget import DiagnosticsWidget
+from . import __version__
 
 
 def _set_text_color(button: QtWidgets.QPushButton, color: str, checked_color: str = "") -> None:
@@ -62,7 +63,7 @@ class MainWindowQt(QtWidgets.QMainWindow):
 
         self.display_buttons = {}
 
-        self.setWindowTitle(config["Instrument"])
+        self.setWindowTitle(f"{config['Instrument']} — ZephyrSim {__version__}")
         self.setWindowIcon(QtGui.QIcon(":/icons/icon.svg"))
 
         self._build_ui()

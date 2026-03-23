@@ -7,6 +7,7 @@ import json
 import os
 
 from PyQt6 import QtSerialPort, QtWidgets
+from . import __version__
 
 
 window_sizes = ["Small", "Medium", "Large"]
@@ -114,7 +115,7 @@ def _open_serial_port(port_name: str) -> QtSerialPort.QSerialPort:
 class ConfigDialog(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Configure")
+        self.setWindowTitle(f"Configure — ZephyrSim {__version__}")
         self.resize(760, 460)
 
         self.settings = _load_settings()
