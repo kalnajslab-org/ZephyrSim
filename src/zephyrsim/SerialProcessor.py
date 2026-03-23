@@ -95,8 +95,8 @@ class SerialProcessor(QtCore.QObject):
             xml.write(display)
 
     def _write_tm_file(self, message: str, binary: bytes) -> None:
-        date, _, time_file, _ = GetDateTime()
-        filename = self.tm_dir + "/TM_" + date + "T" + time_file + "." + self.instrument + ".dat"
+        date, _, time_file, milliseconds = GetDateTime()
+        filename = self.tm_dir + "/TM_" + date + "T" + time_file + "-" + milliseconds + "." + self.instrument + ".dat"
 
         with open(filename, "wb") as tm_file:
             tm_file.write(message.encode())
