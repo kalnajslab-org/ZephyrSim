@@ -216,7 +216,8 @@ class ConfigDialog(QtWidgets.QDialog):
             item = self.zephyr_port_group_layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
-                self.zephyr_port_button_group.removeButton(widget)
+                if isinstance(widget, QtWidgets.QAbstractButton):
+                    self.zephyr_port_button_group.removeButton(widget)
                 widget.deleteLater()
 
         if not ports:
@@ -243,7 +244,8 @@ class ConfigDialog(QtWidgets.QDialog):
             item = self.log_port_group_layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
-                self.log_port_button_group.removeButton(widget)
+                if isinstance(widget, QtWidgets.QAbstractButton):
+                    self.log_port_button_group.removeButton(widget)
                 widget.deleteLater()
 
         if not ports:
