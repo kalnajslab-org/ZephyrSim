@@ -24,7 +24,6 @@ Functions:
 from PyQt6 import QtGui, QtWidgets
 
 import gc
-import resource
 import sys
 import tracemalloc
 
@@ -42,7 +41,7 @@ import argparse
 import datetime
 
 # libraries
-import tracemalloc, gc, resource, time
+import tracemalloc, gc
 
 def FileSetup(config:dict) -> dict:
     '''
