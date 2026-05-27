@@ -8,13 +8,13 @@ This repository contains a platform-independent, Python-based ZephyrSim for the 
 
 Install as a Python module directly from GitHub:
 ```sh
-pip3 install "git+https://github.com/kalnajslab-org/ZephyrSim.git"
+python -m pip install "git+https://github.com/kalnajslab-org/ZephyrSim.git"
 ZephyrSim
 ```
 
 Install in editable mode from the local repository as a Python module and run:
 ```sh
-pip3 install -e .
+python -m pip install -e .
 ZephyrSim
 ```
 
@@ -25,7 +25,7 @@ python3 ZephyrSim.py
 
 Uninstall (if it was installed):
 ```sh
-pip3 uninstall zephyrsim
+python -m pip uninstall zephyrsim
 ```
 
 ## Interface
