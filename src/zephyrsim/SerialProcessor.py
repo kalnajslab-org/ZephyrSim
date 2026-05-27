@@ -176,6 +176,13 @@ class SerialProcessor(QtCore.QObject):
     def _consume_pending_tm_if_ready(self) -> bool:
         if self._pending_tm_remaining <= 0:
             return False
+        # Strip the newline separator that the instrument sends between the XML
+        # and the binary START framing. It often arrives in a separate read chunk
+        # and is therefore not consumed by the trailing-whitespace strip in the
+        # XML parser. Only do this before any binary bytes have been buffered.
+        if not self._pending_tm_binary:
+            while self._zephyr_buffer and self._zephyr_buffer[0] in (0x0A, 0x0D):
+                del self._zephyr_buffer[0]
         if len(self._zephyr_buffer) < self._pending_tm_remaining:
             return True
 
