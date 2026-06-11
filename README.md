@@ -6,27 +6,31 @@ This repository contains a platform-independent, Python-based ZephyrSim for the 
 
 ## Quickstart
 
-Install as a Python module directly from GitHub:
+Three choices for installation/running ZephyrSim:
+
+1. Install as a Python module directly from GitHub:
 ```sh
 python -m pip install "git+https://github.com/kalnajslab-org/ZephyrSim.git"
 ZephyrSim
 ```
 
-Install in editable mode from the local repository as a Python module and run:
+2. Install in editable mode from the local repository as a Python module and run:
 ```sh
 python -m pip install -e .
 ZephyrSim
 ```
 
-Run directly from the local repository without installing:
+3. Run directly from the local repository without installing:
 ```sh
 python3 ZephyrSim.py
 ```
 
-Uninstall (if it was installed):
+- Uninstall (if it was installed):
 ```sh
 python -m pip uninstall zephyrsim
 ```
+
+- See `Resources/MacOS/README.md` for instructions on adding ZephyrSim to a MacOS Dock.
 
 ## Interface
 

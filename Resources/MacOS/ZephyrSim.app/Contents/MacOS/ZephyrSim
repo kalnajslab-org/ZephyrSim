@@ -1,0 +1,15 @@
+#!/bin/bash
+# Launcher for ZephyrSim, run via the macOS Dock/Launchpad.
+#
+# Set ZEPHYRSIM_BIN to the `zephyrsim` executable inside the Python
+# environment where ZephyrSim is installed, e.g.:
+#   /opt/homebrew/anaconda3/envs/<env-name>/bin/zephyrsim
+#
+# Find it by activating your environment and running:
+#   conda activate <env-name> && which -a zephyrsim
+# (use `which -a` since a plain PATH lookup may return a different
+# Python installation's entry point first)
+
+ZEPHYRSIM_BIN="/opt/homebrew/anaconda3/envs/simtest/bin/zephyrsim"
+
+exec "$ZEPHYRSIM_BIN" > "$HOME/Library/Logs/ZephyrSim.log" 2>&1
