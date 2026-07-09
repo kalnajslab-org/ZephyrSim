@@ -156,6 +156,8 @@ class ZephyrSimGUI:
         self.app_exit_requested = False
         self.last_gps_timestamp = datetime.datetime.now().timestamp() - 50
         self.sza = DEFAULT_SZA
+        self.auto_tc_enabled = False
+        self.last_tc_timestamp = datetime.datetime.now().timestamp()
         self.message_display_filters = NormalizeMessageDisplayFilters(config.get("MessageDisplayFilters", {}))
 
         self.signal_bus = signals
@@ -176,6 +178,7 @@ class ZephyrSimGUI:
             message_display_types=message_display_types,
             on_mode=self._on_mode,
             on_tc=self.tc_message,
+            on_toggle_auto_tc=self._on_toggle_auto_tc,
             on_gps=self.gps_message,
             on_sw=self.sw_message,
             on_sack=self.sack_message,
@@ -200,10 +203,11 @@ class ZephyrSimGUI:
         self.add_debug_msg(f"AutoAck: {config['AutoAck']}")
         self.update_display_filter_buttons()
 
-        # Run periodic AutoGPS checks in the Qt event loop.
+        # Run periodic AutoGPS and Repeat-TC checks in the Qt event loop.
         self.gps_timer = QtCore.QTimer(self.window)
         self.gps_timer.setInterval(100)
         self.gps_timer.timeout.connect(self.do_gps)
+        self.gps_timer.timeout.connect(self.do_auto_tc)
         self.gps_timer.start()
 
         ZephyrSimGUI.active_instance = self
@@ -230,6 +234,26 @@ class ZephyrSimGUI:
             self.last_gps_timestamp = now_timestamp
             gps_msg = ZephyrSimUtils.sendGPS(self.sza, self.cmd_filename, self.zephyr_port)
             self.add_msg_to_xml_queue(gps_msg)
+
+    def _on_toggle_auto_tc(self, checked: bool) -> None:
+        self.auto_tc_enabled = checked
+        self.last_tc_timestamp = datetime.datetime.now().timestamp()
+
+    def do_auto_tc(self) -> None:
+        if not self.auto_tc_enabled or self.serial_suspended or self.window is None:
+            return
+        now_timestamp = datetime.datetime.now().timestamp()
+        interval_seconds = self.window.auto_tc_interval_spin.value() * 60
+        if now_timestamp - self.last_tc_timestamp < interval_seconds:
+            return
+        self.last_tc_timestamp = now_timestamp
+
+        tc_text = self.window.tc_input.text() + ";"
+        if tc_text == ";":
+            return
+        self.add_debug_msg(f"Sending Repeat TC: {tc_text}")
+        msg = ZephyrSimUtils.sendTC(self.instrument, tc_text, self.cmd_filename, self.zephyr_port)
+        self.add_msg_to_xml_queue(msg)
 
     def poll_window_events(self) -> None:
         app = QtWidgets.QApplication.instance()
