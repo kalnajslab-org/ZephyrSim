@@ -200,13 +200,30 @@ class SerialProcessor(QtCore.QObject):
         self._pending_tm_remaining = 0
         return False
 
+    def _strip_boundary_noise(self) -> bool:
+        """Discard any bytes sitting before the next '<', since every message
+        starts with one. Returns False if no '<' has arrived yet, in which case
+        the caller should wait for more data rather than discard anything."""
+        idx = self._zephyr_buffer.find(b"<")
+        if idx < 0:
+            return False
+        if idx:
+            junk = bytes(self._zephyr_buffer[:idx])
+            del self._zephyr_buffer[:idx]
+            self.signals.diagnostics_message.emit(
+                WARNING,
+                f"Discarded {len(junk)} stray byte(s) between messages",
+                repr(junk),
+            )
+        return True
+
     def _process_zephyr_stream(self) -> None:
         while True:
             if self._consume_pending_tm_if_ready():
                 return
 
-            while self._zephyr_buffer and self._zephyr_buffer[0] in (0x0A, 0x0D):
-                del self._zephyr_buffer[0]
+            if not self._strip_boundary_noise():
+                return
 
             end_marker = b"</CRC>"
             idx = self._zephyr_buffer.find(end_marker)
@@ -214,8 +231,6 @@ class SerialProcessor(QtCore.QObject):
                 return
 
             end = idx + len(end_marker)
-            while end < len(self._zephyr_buffer) and self._zephyr_buffer[end] in (0x0A, 0x0D):
-                end += 1
 
             xml_bytes = bytes(self._zephyr_buffer[:end])
             del self._zephyr_buffer[:end]
