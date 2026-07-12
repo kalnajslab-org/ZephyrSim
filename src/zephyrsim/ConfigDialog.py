@@ -10,6 +10,8 @@ from PyQt6 import QtSerialPort, QtWidgets
 from . import __version__
 
 
+BAUD_RATES = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600]
+
 window_sizes = ["Small", "Medium", "Large"]
 window_params = {
     "Small": {"font_size": 8, "width": 100, "height": 20},
@@ -98,10 +100,10 @@ def _list_ports() -> list:
     return [port for port in ports if "Bluetooth" not in port]
 
 
-def _open_serial_port(port_name: str) -> QtSerialPort.QSerialPort:
+def _open_serial_port(port_name: str, baud_rate: int = 115200) -> QtSerialPort.QSerialPort:
     port = QtSerialPort.QSerialPort()
     port.setPortName(port_name)
-    port.setBaudRate(115200)
+    port.setBaudRate(baud_rate)
     port.setDataBits(QtSerialPort.QSerialPort.DataBits.Data8)
     port.setParity(QtSerialPort.QSerialPort.Parity.NoParity)
     port.setStopBits(QtSerialPort.QSerialPort.StopBits.OneStop)
@@ -182,6 +184,11 @@ class ConfigDialog(QtWidgets.QDialog):
         self.zephyr_port_button_group.setExclusive(True)
         self._set_zephyr_port_options(ports, "")
         form.addRow(self.zephyr_port_group_box)
+
+        self.zephyr_baud_combo = QtWidgets.QComboBox()
+        self.zephyr_baud_combo.addItems([str(b) for b in BAUD_RATES])
+        self.zephyr_baud_combo.setCurrentText("115200")
+        form.addRow("Zephyr baud rate:", self.zephyr_baud_combo)
 
         self.log_port_group_box = QtWidgets.QGroupBox("Log port")
         self.log_port_group_layout = QtWidgets.QVBoxLayout(self.log_port_group_box)
@@ -279,6 +286,7 @@ class ConfigDialog(QtWidgets.QDialog):
         sec["WindowSize"] = self.window_size_combo.currentText()
         sec["DataDirectory"] = self.data_dir_edit.text().strip()
         sec["ZephyrPort"] = self._current_zephyr_port()
+        sec["ZephyrBaudRate"] = self.zephyr_baud_combo.currentText()
         sec["LogPort"] = self._current_log_port()
         if "MessageDisplayFilters" not in sec:
             sec["MessageDisplayFilters"] = json.dumps({msg_type: True for msg_type in message_display_types})
@@ -298,6 +306,11 @@ class ConfigDialog(QtWidgets.QDialog):
         self.auto_gps_checkbox.setChecked(_bool_from_section(sec, "AutoGPS", True))
         self.corrupt_serial_checkbox.setChecked(_bool_from_section(sec, "CorruptSerial", False))
         self.data_dir_edit.setText(sec.get("DataDirectory", ""))
+
+        baud_str = sec.get("ZephyrBaudRate", "115200")
+        if self.zephyr_baud_combo.findText(baud_str) < 0:
+            baud_str = "115200"
+        self.zephyr_baud_combo.setCurrentText(baud_str)
 
         ports = _list_ports()
         zephyr_name = sec.get("ZephyrPort", "")
@@ -391,7 +404,8 @@ class ConfigDialog(QtWidgets.QDialog):
             return
 
         try:
-            zephyr = _open_serial_port(zephyr_port_name)
+            zephyr_baud = int(sec.get("ZephyrBaudRate", "115200"))
+            zephyr = _open_serial_port(zephyr_port_name, zephyr_baud)
             if log_port_name != zephyr_port_name:
                 log = _open_serial_port(log_port_name)
                 shared_ports = False

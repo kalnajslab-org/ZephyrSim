@@ -7,6 +7,18 @@ from typing import Dict, List, Optional
 
 from PyQt6 import QtCore, QtWidgets
 
+VALID_MODES = frozenset(["SB", "FL", "LP", "SA", "EF"])
+
+
+def classify_command(text: str) -> str:
+    """Return 'mode', 'tc', or 'empty' for a sequencer command cell value."""
+    t = text.strip()
+    if not t:
+        return "empty"
+    if t.upper() in VALID_MODES:
+        return "mode"
+    return "tc"
+
 _DUR_RE = re.compile(r'^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$')
 
 
@@ -55,6 +67,7 @@ class TCSequenceWidget(QtWidgets.QWidget):
         self.setWindowTitle("TC Sequences")
         self._sequences: Dict[str, List[dict]] = dict(sequences or {})
         self._running_name: str = ""
+        self._saving: bool = False
         self._build_ui()
         self._populate_combo()
 
@@ -85,15 +98,22 @@ class TCSequenceWidget(QtWidgets.QWidget):
 
         # sequence table: columns TC | Wait
         self._table = QtWidgets.QTableWidget(0, 2)
-        self._table.setHorizontalHeaderLabels(["TC", "Wait"])
+        self._table.setHorizontalHeaderLabels(["Command", "Wait"])
         hh = self._table.horizontalHeader()
         hh.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
         hh.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Fixed)
         self._table.setColumnWidth(1, 80)
         self._table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectItems)
-        self._table.setFixedHeight(140)
+        self._table.setFixedHeight(280)
         self._table.itemChanged.connect(self._on_table_edited)
         root.addWidget(self._table)
+
+        hint = QtWidgets.QLabel(
+            "Command: TC params (comma-separated), or mode: SB FL LP SA EF\n"
+            "Wait: 30s · 2m30s · 1h20m · 5 (bare integer = minutes)"
+        )
+        hint.setStyleSheet("color: gray; font-size: 9pt;")
+        root.addWidget(hint)
 
         # row management + run controls
         ctrl = QtWidgets.QHBoxLayout()
@@ -147,8 +167,8 @@ class TCSequenceWidget(QtWidgets.QWidget):
                 self._insert_row(step.get("tc", ""), step.get("wait_s", 0.0))
         self._table.blockSignals(False)
 
-    def _insert_row(self, tc: str, wait_s: float) -> None:
-        r = self._table.rowCount()
+    def _insert_row(self, tc: str, wait_s: float, at: int = -1) -> None:
+        r = at if at >= 0 else self._table.rowCount()
         self._table.insertRow(r)
         self._table.setItem(r, 0, QtWidgets.QTableWidgetItem(tc))
         self._table.setItem(r, 1, QtWidgets.QTableWidgetItem(format_duration(wait_s)))
@@ -159,43 +179,56 @@ class TCSequenceWidget(QtWidgets.QWidget):
         name = self._current_name()
         if not name:
             return
+        self._saving = True
         rows = []
-        for r in range(self._table.rowCount()):
-            tc_item = self._table.item(r, 0)
-            wait_item = self._table.item(r, 1)
-            tc = tc_item.text().strip() if tc_item else ""
-            wait_str = wait_item.text().strip() if wait_item else "0s"
-            try:
-                wait_s = parse_duration(wait_str)
+        try:
+            for r in range(self._table.rowCount()):
+                tc_item = self._table.item(r, 0)
+                wait_item = self._table.item(r, 1)
+                tc = tc_item.text().strip() if tc_item else ""
+                wait_str = wait_item.text().strip() if wait_item else "0s"
+                try:
+                    wait_s = parse_duration(wait_str)
+                except ValueError:
+                    wait_s = 0.0
+                if wait_s <= 0:
+                    wait_s = 60.0
                 normalized = format_duration(wait_s)
                 if wait_item and normalized != wait_str:
-                    self._table.blockSignals(True)
                     wait_item.setText(normalized)
-                    self._table.blockSignals(False)
-            except ValueError:
-                wait_s = 0.0
-                if wait_item:
-                    self._table.blockSignals(True)
-                    wait_item.setText("0s")
-                    self._table.blockSignals(False)
-            rows.append({"tc": tc, "wait_s": wait_s})
+                rows.append({"tc": tc, "wait_s": wait_s})
+        finally:
+            self._saving = False
         self._sequences[name] = rows
         self.sequences_changed.emit(dict(self._sequences))
 
-    def _on_table_edited(self) -> None:
+    def _on_table_edited(self, item: QtWidgets.QTableWidgetItem) -> None:
+        if self._saving:
+            return
+        if item.column() == 0 and classify_command(item.text()) == "mode":
+            upper = item.text().strip().upper()
+            if upper != item.text():
+                def _apply():
+                    self._saving = True
+                    item.setText(upper)
+                    self._saving = False
+                    self._save_current()
+                QtCore.QTimer.singleShot(0, _apply)
+                return
         self._save_current()
 
     def _on_add_row(self) -> None:
+        selected_rows = sorted({i.row() for i in self._table.selectedIndexes()})
+        at = (selected_rows[-1] + 1) if selected_rows else self._table.rowCount()
         self._table.blockSignals(True)
-        self._insert_row("", 0)
+        self._insert_row("", 60, at=at)
         self._table.blockSignals(False)
         self._save_current()
 
     def _on_del_row(self) -> None:
         rows = sorted({i.row() for i in self._table.selectedIndexes()}, reverse=True)
         if not rows:
-            last = self._table.rowCount() - 1
-            rows = [last] if last >= 0 else []
+            return
         self._table.blockSignals(True)
         for r in rows:
             self._table.removeRow(r)

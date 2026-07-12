@@ -32,7 +32,7 @@ from .ZephyrSignals import ZephyrSignalBus
 from .ConfigDialog import ConfigDialog
 from .MainWindowQt import MainWindowQt
 from .DiagnosticsWidget import INFO, ERROR, _LABELS
-from .TCSequenceWidget import TCSequenceWidget, format_duration
+from .TCSequenceWidget import TCSequenceWidget, classify_command, format_duration
 
 # Perhaps this should be a configuration option
 DEFAULT_SZA = 120
@@ -164,10 +164,13 @@ class ZephyrSimGUI:
         self._tc_seq_widget.run_requested.connect(self._on_run_sequence)
         self._tc_seq_widget.stop_requested.connect(self._on_stop_sequence)
         self._tc_seq_timer: Optional[QtCore.QTimer] = None
+        self._tc_seq_countdown: Optional[QtCore.QTimer] = None
         self._tc_seq_steps: list = []
         self._tc_seq_index: int = 0
         self._tc_seq_repeat: bool = False
         self._tc_seq_name: str = ""
+        self._tc_seq_wait_remaining: float = 0.0
+        self._tc_seq_step_label: str = ""
 
         self.signal_bus = signals
         self.signal_bus.log_message.connect(self.add_msg_to_log_display)
@@ -326,6 +329,10 @@ class ZephyrSimGUI:
             self._tc_seq_timer = QtCore.QTimer(self.window)
             self._tc_seq_timer.setSingleShot(True)
             self._tc_seq_timer.timeout.connect(self._tc_seq_step)
+        if self._tc_seq_countdown is None:
+            self._tc_seq_countdown = QtCore.QTimer(self.window)
+            self._tc_seq_countdown.setInterval(1000)
+            self._tc_seq_countdown.timeout.connect(self._tc_seq_countdown_tick)
         self._tc_seq_widget.set_running_state(True, f"Starting '{name}'…", name=name)
         if hasattr(self.window, 'seq_btn'):
             self.window.seq_btn.setText(name)
@@ -338,6 +345,8 @@ class ZephyrSimGUI:
             if self._tc_seq_repeat:
                 self._tc_seq_index = 0
             else:
+                if self._tc_seq_countdown is not None:
+                    self._tc_seq_countdown.stop()
                 self._tc_seq_widget.set_running_state(False, "Done")
                 if hasattr(self.window, 'seq_btn'):
                     self.window.seq_btn.setText("Sequences")
@@ -351,18 +360,38 @@ class ZephyrSimGUI:
         idx = self._tc_seq_index + 1
 
         if tc_text and not self.serial_suspended:
-            tc_with_semi = tc_text if tc_text.endswith(";") else tc_text + ";"
-            self.add_debug_msg(f"Seq '{self._tc_seq_name}' [{idx}/{total}]: {tc_with_semi}")
-            msg = ZephyrSimUtils.sendTC(self.instrument, tc_with_semi, self.cmd_filename, self.zephyr_port)
-            self.add_msg_to_xml_queue(msg)
+            kind = classify_command(tc_text)
+            if kind == "mode":
+                mode = tc_text.strip().upper()
+                self.add_debug_msg(f"Seq '{self._tc_seq_name}' [{idx}/{total}]: mode {mode}")
+                im_msg = ZephyrSimUtils.sendIM(self.instrument, mode, self.cmd_filename, self.zephyr_port)
+                self.add_msg_to_xml_queue(im_msg)
+            else:
+                tc_with_semi = tc_text if tc_text.endswith(";") else tc_text + ";"
+                self.add_debug_msg(f"Seq '{self._tc_seq_name}' [{idx}/{total}]: {tc_with_semi}")
+                msg = ZephyrSimUtils.sendTC(self.instrument, tc_with_semi, self.cmd_filename, self.zephyr_port)
+                self.add_msg_to_xml_queue(msg)
 
-        self._tc_seq_widget.set_running_state(
-            True, f"[{idx}/{total}] {tc_text} — waiting {format_duration(wait_s)}"
-        )
+        self._tc_seq_step_label = f"[{idx}/{total}] {tc_text}"
+        self._tc_seq_wait_remaining = wait_s
+        self._tc_seq_update_status()
         self._tc_seq_index += 1
+        if self._tc_seq_countdown is not None:
+            self._tc_seq_countdown.start()
         self._tc_seq_timer.start(max(int(wait_s * 1000), 0))
 
+    def _tc_seq_update_status(self) -> None:
+        self._tc_seq_widget.set_running_state(
+            True, f"{self._tc_seq_step_label} — {format_duration(self._tc_seq_wait_remaining)}"
+        )
+
+    def _tc_seq_countdown_tick(self) -> None:
+        self._tc_seq_wait_remaining = max(0.0, self._tc_seq_wait_remaining - 1.0)
+        self._tc_seq_update_status()
+
     def _on_stop_sequence(self) -> None:
+        if self._tc_seq_countdown is not None:
+            self._tc_seq_countdown.stop()
         if self._tc_seq_timer is not None:
             self._tc_seq_timer.stop()
         self._tc_seq_widget.set_running_state(False, "Stopped")
