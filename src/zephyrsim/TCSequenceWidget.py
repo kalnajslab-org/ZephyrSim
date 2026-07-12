@@ -38,12 +38,12 @@ def format_duration(seconds: float) -> str:
     return "".join(parts)
 
 
-class TCSequenceWidget(QtWidgets.QGroupBox):
-    """Collapsible panel for managing and running named TC sequences.
+class TCSequenceWidget(QtWidgets.QWidget):
+    """Floating tool window for managing and running named TC sequences.
 
-    Hidden by default; shown/hidden by a toggle button in MainWindowQt.
-    Sequences are stored as dict[name → list[{tc, wait_s}]] and persisted
-    in ZephyrSim.ini under the active config set's TCSequences key.
+    Opened/closed by the Sequences button in MainWindowQt. Sequences are
+    stored as dict[name → list[{tc, wait_s}]] and persisted in ZephyrSim.ini
+    under the active config set's TCSequences key.
     """
 
     sequences_changed = QtCore.pyqtSignal(dict)       # any edit; caller persists
@@ -51,11 +51,11 @@ class TCSequenceWidget(QtWidgets.QGroupBox):
     stop_requested = QtCore.pyqtSignal()
 
     def __init__(self, sequences: Optional[Dict[str, List[dict]]] = None, parent=None):
-        super().__init__("TC Sequences", parent)
+        super().__init__(parent)
+        self.setWindowTitle("TC Sequences")
         self._sequences: Dict[str, List[dict]] = dict(sequences or {})
         self._build_ui()
         self._populate_combo()
-        self.setVisible(False)
 
     # ---- construction ----------------------------------------------------
 

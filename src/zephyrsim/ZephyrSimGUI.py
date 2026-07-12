@@ -202,6 +202,9 @@ class ZephyrSimGUI:
             tc_sequence_widget=self._tc_seq_widget,
         )
         self.window.show()
+        self._tc_seq_widget.setParent(self.window)
+        self._tc_seq_widget.setWindowFlags(QtCore.Qt.WindowType.Tool)
+        self._tc_seq_widget.setAttribute(QtCore.Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.window.log_window.document().setMaximumBlockCount(MAX_LOG_BLOCKS)
         self.window.zephyr_window.document().setMaximumBlockCount(MAX_LOG_BLOCKS)
         self.signal_bus.diagnostics_message.connect(self.window.diagnostics_widget.receive_message)
@@ -325,7 +328,6 @@ class ZephyrSimGUI:
             self._tc_seq_timer.timeout.connect(self._tc_seq_step)
         self._tc_seq_widget.set_running_state(True, f"Starting '{name}'…")
         if hasattr(self.window, 'seq_btn'):
-            self.window.seq_btn.setChecked(False)  # closes panel
             self.window.seq_btn.setText(name)
             color = "red" if repeat else "green"
             self.window.seq_btn.setStyleSheet(f"QPushButton {{ background-color: {color}; }}")
@@ -367,7 +369,6 @@ class ZephyrSimGUI:
         if hasattr(self.window, 'seq_btn'):
             self.window.seq_btn.setText("Sequences")
             self.window.seq_btn.setStyleSheet("")
-            self.window.seq_btn.setChecked(False)  # closes panel
         if self._tc_seq_name:
             self.add_debug_msg(f"Sequence '{self._tc_seq_name}' stopped")
 

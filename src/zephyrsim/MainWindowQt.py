@@ -105,11 +105,9 @@ class MainWindowQt(QtWidgets.QMainWindow):
         tc_layout.addWidget(self.tc_button)
         tc_layout.addWidget(self.tc_input)
         if self.tc_sequence_widget is not None:
-            self.seq_btn = QtWidgets.QPushButton("Sequences")
-            self.seq_btn.setCheckable(True)
-            self.seq_btn.setChecked(False)
-            self.seq_btn.setToolTip("Show/hide TC sequence panel")
-            self.seq_btn.toggled.connect(self.tc_sequence_widget.setVisible)
+            self.seq_btn = QtWidgets.QPushButton("Sequencer")
+            self.seq_btn.setToolTip("Show sequencer control")
+            self.seq_btn.clicked.connect(self._on_seq_btn_clicked)
             tc_layout.addWidget(self.seq_btn)
         top_row.addWidget(tc_group)
 
@@ -179,9 +177,6 @@ class MainWindowQt(QtWidgets.QMainWindow):
         display_layout.addStretch(1)
         root.addWidget(display_group)
 
-        if self.tc_sequence_widget is not None:
-            root.addWidget(self.tc_sequence_widget)
-
         output_row = QtWidgets.QHBoxLayout()
         log_group = QtWidgets.QGroupBox("StratoCore Log Messages")
         log_layout = QtWidgets.QVBoxLayout(log_group)
@@ -243,6 +238,20 @@ class MainWindowQt(QtWidgets.QMainWindow):
         else:
             self.suspend_button.setText("Suspend")
             _set_text_color(self.suspend_button, "darkorange")
+
+    def _on_seq_btn_clicked(self) -> None:
+        if self.tc_sequence_widget is None:
+            return
+        if self.tc_sequence_widget.isMinimized():
+            self.tc_sequence_widget.showNormal()
+            self.tc_sequence_widget.raise_()
+        elif self.tc_sequence_widget.isVisible():
+            self.tc_sequence_widget.hide()
+        else:
+            self.tc_sequence_widget.show()
+            self.tc_sequence_widget.raise_()
+        visible = self.tc_sequence_widget.isVisible()
+        self.seq_btn.setToolTip("Hide sequencer control" if visible else "Show sequencer control")
 
     def _copy_tm_directory(self) -> None:
         pyperclip.copy(self.tm_directory.text())
