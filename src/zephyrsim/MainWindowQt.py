@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import Callable, Dict, List, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import pyperclip
 from PyQt6 import QtGui, QtWidgets
@@ -27,7 +27,6 @@ class MainWindowQt(QtWidgets.QMainWindow):
         message_display_types: List[str],
         on_mode: Callable[[str], None],
         on_tc: Callable[[], None],
-        on_toggle_auto_tc: Callable[[bool], None],
         on_gps: Callable[[], None],
         on_sw: Callable[[], None],
         on_sack: Callable[[], None],
@@ -40,6 +39,7 @@ class MainWindowQt(QtWidgets.QMainWindow):
         on_close: Callable[[], None],
         log_port_display_name: str,
         zephyr_port_display_name: str,
+        tc_sequence_widget: Optional[QtWidgets.QWidget] = None,
     ):
         super().__init__()
         self.config = config
@@ -49,7 +49,6 @@ class MainWindowQt(QtWidgets.QMainWindow):
         self.message_display_types = message_display_types
         self.on_mode = on_mode
         self.on_tc = on_tc
-        self.on_toggle_auto_tc = on_toggle_auto_tc
         self.on_gps = on_gps
         self.on_sw = on_sw
         self.on_sack = on_sack
@@ -62,6 +61,7 @@ class MainWindowQt(QtWidgets.QMainWindow):
         self.on_close_callback = on_close
         self.log_port_display_name = log_port_display_name
         self.zephyr_port_display_name = zephyr_port_display_name
+        self.tc_sequence_widget = tc_sequence_widget
 
         self.display_buttons = {}
 
@@ -99,22 +99,18 @@ class MainWindowQt(QtWidgets.QMainWindow):
         self.tc_button.setToolTip("Send Telecommand")
         self.tc_button.clicked.connect(self.on_tc)
         self.tc_input = QtWidgets.QLineEdit()
-        self.tc_input.setFixedWidth(90)
+        self.tc_input.setMinimumWidth(90)
         self.tc_input.returnPressed.connect(self.on_tc)
         self.tc_input.setToolTip("TC Text, semicolon will be appended")
         tc_layout.addWidget(self.tc_button)
         tc_layout.addWidget(self.tc_input)
-
-        self.auto_tc_checkbox = QtWidgets.QCheckBox("Repeat every")
-        self.auto_tc_checkbox.setToolTip("Automatically resend the TC text above at the interval specified")
-        self.auto_tc_checkbox.toggled.connect(self.on_toggle_auto_tc)
-        self.auto_tc_interval_spin = QtWidgets.QSpinBox()
-        self.auto_tc_interval_spin.setRange(1, 720)
-        self.auto_tc_interval_spin.setValue(5)
-        self.auto_tc_interval_spin.setSuffix(" min")
-        self.auto_tc_interval_spin.setFixedWidth(80)
-        tc_layout.addWidget(self.auto_tc_checkbox)
-        tc_layout.addWidget(self.auto_tc_interval_spin)
+        if self.tc_sequence_widget is not None:
+            self.seq_btn = QtWidgets.QPushButton("Sequences")
+            self.seq_btn.setCheckable(True)
+            self.seq_btn.setChecked(False)
+            self.seq_btn.setToolTip("Show/hide TC sequence panel")
+            self.seq_btn.toggled.connect(self.tc_sequence_widget.setVisible)
+            tc_layout.addWidget(self.seq_btn)
         top_row.addWidget(tc_group)
 
         sza_group = QtWidgets.QGroupBox("SZA")
@@ -182,6 +178,9 @@ class MainWindowQt(QtWidgets.QMainWindow):
 
         display_layout.addStretch(1)
         root.addWidget(display_group)
+
+        if self.tc_sequence_widget is not None:
+            root.addWidget(self.tc_sequence_widget)
 
         output_row = QtWidgets.QHBoxLayout()
         log_group = QtWidgets.QGroupBox("StratoCore Log Messages")

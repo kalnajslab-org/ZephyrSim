@@ -412,6 +412,14 @@ class ConfigDialog(QtWidgets.QDialog):
         self.settings["-Main-"]["SelectedConfig"] = config_set
         _save_settings(self.settings)
 
+        tc_sequences_str = sec.get("TCSequences", "{}")
+        try:
+            tc_sequences = json.loads(tc_sequences_str)
+            if not isinstance(tc_sequences, dict):
+                tc_sequences = {}
+        except Exception:
+            tc_sequences = {}
+
         self.result_config = {
             "ZephyrPort": zephyr,
             "LogPort": log,
@@ -425,6 +433,7 @@ class ConfigDialog(QtWidgets.QDialog):
             "DataDirectory": data_directory,
             "ConfigSet": config_set,
             "MessageDisplayFilters": msg_display_filters,
+            "TCSequences": tc_sequences,
         }
 
         self.accept()
