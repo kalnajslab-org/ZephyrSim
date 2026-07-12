@@ -90,6 +90,49 @@ any devices.
 
 ![Log Messages Window](Resources/LogMessages.png)
 
+## TC Sequencer
+
+The **Sequencer** button in the _Telecommands_ group opens a floating sequencer control window.
+
+![TC Sequencer](Resources/Sequencer.png)
+
+
+The window can be repositioned and stays above the main window without blocking interaction.
+
+### Sequences
+
+Each named sequence is a table of steps. Each step has a **TC** text and a **Wait** time —
+the delay after sending that TC before the next one is sent. The last step's wait applies
+before the sequence repeats (if repeat is enabled).
+
+Wait times are entered in a readable duration format:
+
+| Entry | Meaning |
+|-------|---------|
+| `5` | 5 minutes (bare integer = minutes) |
+| `30s` | 30 seconds |
+| `2m30s` | 2 minutes 30 seconds |
+| `1h20m5s` | 1 hour 20 minutes 5 seconds |
+
+Entries are normalized on edit (e.g. `400s` → `6m40s`).
+
+Multiple named sequences can be defined per configuration set. Use **New**, **Rename**, and
+**Delete** to manage them. Sequences are saved automatically and persist across sessions as
+part of the named configuration.
+
+### Running a Sequence
+
+Press **Run** to start the selected sequence. The **Sequences** button in the main window
+changes to the sequence name and turns:
+- **Green** for a one-shot sequence
+- **Red** for a repeating sequence (Repeat checkbox checked)
+
+Clicking the colored button opens the sequencer window while the sequence is running,
+where it can be stopped with the **Stop** button.
+
+The status bar at the top of the sequencer window shows **Not running** when idle,
+or **Running: \<name\>** (highlighted green) when a sequence is active.
+
 ## Log File Structure
 
 Each time a ZephyrSim Simulator session is successfully started, a directory under the `sessions/` directory is created. Each session's 
