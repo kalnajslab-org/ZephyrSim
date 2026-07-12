@@ -15,9 +15,11 @@ from PyQt6 import QtCore, QtSerialPort
 from . import ZephyrSignals
 from .DiagnosticsWidget import ERROR, WARNING
 from . import ZephyrSimUtils
+from .ZephyrFramer import FrameResult, FrameStatus, ZephyrFramer
 
 
 def GetDateTime() -> tuple:
+    """Return (date, time, time_for_filename, milliseconds) strings for now."""
     # create date and time strings
     current_datetime = datetime.datetime.now()
     date = str(current_datetime.date().strftime("%Y-%m-%d"))
@@ -44,6 +46,26 @@ class SerialProcessor(QtCore.QObject):
         corrupt_serial: bool = False,
         parent: Optional[QtCore.QObject] = None,
     ) -> None:
+        """Wire up serial ports and connect readyRead signals.
+
+        Args:
+            app_signals:    Shared signal bus used to emit log, XML, command,
+                            and diagnostics events to the rest of the app.
+            logport:        Serial port carrying plain-text instrument log lines
+                            (dedicated-port mode only; None if unused).
+            zephyrport:     Serial port carrying Zephyr XML/binary messages.
+                            In shared-port mode this port also carries log lines
+                            interleaved with Zephyr messages.
+            inst_filename:  Path to the file where log lines are appended.
+            xml_filename:   Path to the file where Zephyr XML messages are appended.
+            tm_dir:         Directory where received TM binary files are written.
+            instrument:     Instrument identifier string used in TM filenames.
+            shared_ports:   True if log and Zephyr traffic share a single port;
+                            False if they arrive on separate ports.
+            corrupt_serial: If True, randomly flip or drop bytes to exercise CRC
+                            and framing error paths during bench testing.
+            parent:         Optional Qt parent object.
+        """
         super().__init__(parent)
         self.signals = app_signals
         self.log_port = logport
@@ -58,6 +80,10 @@ class SerialProcessor(QtCore.QObject):
         self._log_buffer = bytearray()
         self._zephyr_buffer = bytearray()
 
+        # Used by the dedicated-port framer.
+        self._framer = ZephyrFramer()
+
+        # Used by the shared-stream path (deferred; see zephyr-framing-design.md).
         self._pending_tm_header: Optional[str] = None
         self._pending_tm_remaining = 0
         self._pending_tm_binary = bytearray()
@@ -74,6 +100,7 @@ class SerialProcessor(QtCore.QObject):
                 self.log_port.readyRead.connect(self._on_log_ready_read)
 
     def _emit_log_message(self, message: str) -> None:
+        """Timestamp, emit, and persist one plain-text instrument log line."""
         message = message.rstrip() + "\n"
 
         _, time_val, _, milliseconds = GetDateTime()
@@ -86,6 +113,7 @@ class SerialProcessor(QtCore.QObject):
             inst.write(display_msg)
 
     def _emit_zephyr_message(self, msg_dict: dict) -> None:
+        """Timestamp, emit, and persist one parsed Zephyr XML message."""
         _, time_val, _, milliseconds = GetDateTime()
         timestring = "[" + time_val + "." + milliseconds + "] "
         display = f'{timestring} (FROM){msg_dict["XMLTOKEN"]}\n'
@@ -94,13 +122,17 @@ class SerialProcessor(QtCore.QObject):
         with open(self.xml_filename, "a") as xml:
             xml.write(display)
 
-    def _write_tm_file(self, message: str, binary: bytes) -> None:
+    def _write_tm_file(self, raw: bytes) -> None:
+        """Write a TM message to a timestamped .dat file in tm_dir.
+
+        raw must be the exact bytes received from the instrument: the XML header
+        through </CRC>\\n, followed immediately by the binary block START...END.
+        """
         date, _, time_file, milliseconds = GetDateTime()
         filename = self.tm_dir + "/TM_" + date + "T" + time_file + "-" + milliseconds + "." + self.instrument + ".dat"
 
         with open(filename, "wb") as tm_file:
-            tm_file.write(message.encode())
-            tm_file.write(binary)
+            tm_file.write(raw)
 
     @staticmethod
     def _xml_header(message: str) -> str:
@@ -109,6 +141,11 @@ class SerialProcessor(QtCore.QObject):
         return message[:start_idx].strip() if start_idx >= 0 else message.strip()
 
     def _verify_crc(self, message: str) -> bool:
+        """Check the XML CRC tag and emit a diagnostic if it does not match.
+
+        Used by the shared-stream path. The dedicated-port path delegates CRC
+        checking to ZephyrFramer. Returns True if the CRC is valid.
+        """
         crc_open = message.rfind("<CRC>")
         crc_close = message.rfind("</CRC>")
         if crc_open < 0 or crc_close < 0:
@@ -129,6 +166,12 @@ class SerialProcessor(QtCore.QObject):
         return True
 
     def _start_or_emit_from_xml(self, message: str) -> None:
+        """Parse one XML message from the shared-stream path and act on it.
+
+        Verifies the CRC, parses with xmltodict, dispatches acks, and emits
+        the zephyr_message signal. For TM messages, sets _pending_tm_* so that
+        _consume_pending_tm_if_ready can collect the following binary block.
+        """
         self._verify_crc(message)
         try:
             msg_dict = xmltodict.parse(f"<XMLTOKEN>{message}</XMLTOKEN>")
@@ -155,6 +198,11 @@ class SerialProcessor(QtCore.QObject):
         self._emit_zephyr_message(msg_dict)
 
     def _verify_tm_binary_crc(self, binary: bytearray, header: str) -> None:
+        """Check the START/END framing and binary CRC of a TM payload.
+
+        Used by the shared-stream path. Emits a WARNING diagnostic for any
+        framing or CRC failure but does not raise; the caller continues regardless.
+        """
         xml = self._xml_header(header)
         if len(binary) < 10:
             self.signals.diagnostics_message.emit(WARNING, "TM payload error", f"Binary too short to contain framing\n{xml}")
@@ -174,6 +222,13 @@ class SerialProcessor(QtCore.QObject):
             )
 
     def _consume_pending_tm_if_ready(self) -> bool:
+        """Pull the TM binary block from _zephyr_buffer when enough bytes have arrived.
+
+        Used by the shared-stream path. Returns True if a binary block is still
+        expected but the buffer does not yet contain enough bytes (caller should
+        wait for more data). Returns False when no binary is pending or when the
+        block has just been consumed and verified.
+        """
         if self._pending_tm_remaining <= 0:
             return False
         # Strip the newline separator that the instrument sends between the XML
@@ -192,7 +247,8 @@ class SerialProcessor(QtCore.QObject):
 
         if self._pending_tm_header is not None:
             self._verify_tm_binary_crc(self._pending_tm_binary, self._pending_tm_header)
-            self._write_tm_file(self._pending_tm_header, bytes(self._pending_tm_binary))
+            raw = self._pending_tm_header.encode() + bytes(self._pending_tm_binary)
+            self._write_tm_file(raw)
             self.signals.command_message.emit("TMAck")
 
         self._pending_tm_header = None
@@ -200,46 +256,41 @@ class SerialProcessor(QtCore.QObject):
         self._pending_tm_remaining = 0
         return False
 
-    def _strip_boundary_noise(self) -> bool:
-        """Discard any bytes sitting before the next '<', since every message
-        starts with one. Returns False if no '<' has arrived yet, in which case
-        the caller should wait for more data rather than discard anything."""
-        idx = self._zephyr_buffer.find(b"<")
-        if idx < 0:
-            return False
-        if idx:
-            junk = bytes(self._zephyr_buffer[:idx])
-            del self._zephyr_buffer[:idx]
-            self.signals.diagnostics_message.emit(
-                WARNING,
-                f"Discarded {len(junk)} stray byte(s) between messages",
-                repr(junk),
-            )
-        return True
+    def _dispatch_frame(self, result: FrameResult) -> None:
+        """Handle one FrameResult produced by ZephyrFramer (dedicated-port path)."""
+        if result.status is FrameStatus.FRAMING_ERROR:
+            self.signals.diagnostics_message.emit(WARNING, "Framing error", result.detail)
+            return
 
-    def _process_zephyr_stream(self) -> None:
-        while True:
-            if self._consume_pending_tm_if_ready():
-                return
+        if result.status is FrameStatus.CRC_ERROR:
+            self.signals.diagnostics_message.emit(WARNING, "CRC error", result.detail)
 
-            if not self._strip_boundary_noise():
-                return
+        header_str = result.header.decode("ascii", errors="ignore")
+        try:
+            msg_dict = xmltodict.parse(f"<XMLTOKEN>{header_str}</XMLTOKEN>")
+        except Exception as exc:
+            self.signals.diagnostics_message.emit(ERROR, "Error parsing XML", f"{exc}\n{header_str}")
+            return
 
-            end_marker = b"</CRC>"
-            idx = self._zephyr_buffer.find(end_marker)
-            if idx < 0:
-                return
+        if result.tag == "TM":
+            self._write_tm_file(result.raw)
+            self.signals.command_message.emit("TMAck")
+        elif result.tag == "S":
+            self.signals.command_message.emit("SAck")
+        elif result.tag == "RA":
+            self.signals.command_message.emit("RAAck")
 
-            end = idx + len(end_marker)
-
-            xml_bytes = bytes(self._zephyr_buffer[:end])
-            del self._zephyr_buffer[:end]
-
-            message = xml_bytes.decode("ascii", errors="ignore")
-            if message:
-                self._start_or_emit_from_xml(message)
+        self._emit_zephyr_message(msg_dict)
 
     def _process_shared_stream(self) -> None:
+        """Drain _zephyr_buffer in shared-port mode (log lines + Zephyr XML on one port).
+
+        Routes each byte run to either _start_or_emit_from_xml (when the buffer
+        starts with '<') or _emit_log_message (plain-text log lines). Returns
+        whenever the buffer is exhausted or a complete unit cannot yet be formed.
+        Note: replacing this with ZephyrFramer-based SharedStreamDemux is deferred
+        (see docs/zephyr-framing-design.md).
+        """
         while True:
             if self._consume_pending_tm_if_ready():
                 return
@@ -274,6 +325,7 @@ class SerialProcessor(QtCore.QObject):
             self._emit_log_message(line.decode("ascii", errors="ignore"))
 
     def _on_log_ready_read(self) -> None:
+        """Slot: drain the dedicated log port and emit complete lines."""
         if self.log_port is None:
             return
         self._log_buffer.extend(bytes(self.log_port.readAll()))
@@ -291,6 +343,7 @@ class SerialProcessor(QtCore.QObject):
     _CORRUPT_EVERY = 2000
 
     def _corrupt_for_testing(self, data: bytes) -> bytes:
+        """Randomly flip or drop one byte every _CORRUPT_EVERY bytes for bench testing."""
         result = bytearray(data)
         for i in range(len(result)):
             SerialProcessor._corrupt_counter += 1
@@ -304,12 +357,14 @@ class SerialProcessor(QtCore.QObject):
         return bytes(result)
 
     def _on_zephyr_ready_read(self) -> None:
+        """Slot: feed incoming bytes to ZephyrFramer and dispatch each frame."""
         raw = self.zephyr_port.readAll().data()
         if self.corrupt_serial:
             raw = self._corrupt_for_testing(raw)
-        self._zephyr_buffer.extend(raw)
-        self._process_zephyr_stream()
+        for result in self._framer.feed(raw):
+            self._dispatch_frame(result)
 
     def _on_shared_ready_read(self) -> None:
+        """Slot: buffer incoming bytes and run the shared-stream demux."""
         self._zephyr_buffer.extend(bytes(self.zephyr_port.readAll()))
         self._process_shared_stream()
