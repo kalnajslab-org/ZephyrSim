@@ -54,6 +54,7 @@ class TCSequenceWidget(QtWidgets.QWidget):
         super().__init__(parent)
         self.setWindowTitle("TC Sequences")
         self._sequences: Dict[str, List[dict]] = dict(sequences or {})
+        self._running_name: str = ""
         self._build_ui()
         self._populate_combo()
 
@@ -62,6 +63,11 @@ class TCSequenceWidget(QtWidgets.QWidget):
     def _build_ui(self) -> None:
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(4, 4, 4, 4)
+
+        self._state_label = QtWidgets.QLabel("Not running")
+        self._state_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self._state_label.setContentsMargins(4, 2, 4, 2)
+        root.addWidget(self._state_label)
 
         # name selector row
         name_row = QtWidgets.QHBoxLayout()
@@ -161,6 +167,11 @@ class TCSequenceWidget(QtWidgets.QWidget):
             wait_str = wait_item.text().strip() if wait_item else "0s"
             try:
                 wait_s = parse_duration(wait_str)
+                normalized = format_duration(wait_s)
+                if wait_item and normalized != wait_str:
+                    self._table.blockSignals(True)
+                    wait_item.setText(normalized)
+                    self._table.blockSignals(False)
             except ValueError:
                 wait_s = 0.0
                 if wait_item:
@@ -243,10 +254,21 @@ class TCSequenceWidget(QtWidgets.QWidget):
     def _on_stop(self) -> None:
         self.stop_requested.emit()
 
-    def set_running_state(self, running: bool, status: str = "") -> None:
+    def set_running_state(self, running: bool, status: str = "", name: str = "") -> None:
         self._run_btn.setEnabled(not running)
         self._stop_btn.setEnabled(running)
         self._status_label.setText(status)
+        if name:
+            self._running_name = name
+        if running:
+            self._state_label.setText(f"Running: {self._running_name}")
+            self._state_label.setStyleSheet(
+                "QLabel { background-color: green; color: white; font-weight: bold; padding: 2px; }"
+            )
+        else:
+            self._state_label.setText("Not running")
+            self._state_label.setStyleSheet("")
+            self._running_name = ""
 
     def load_sequences(self, sequences: dict) -> None:
         self._sequences = dict(sequences or {})

@@ -326,7 +326,7 @@ class ZephyrSimGUI:
             self._tc_seq_timer = QtCore.QTimer(self.window)
             self._tc_seq_timer.setSingleShot(True)
             self._tc_seq_timer.timeout.connect(self._tc_seq_step)
-        self._tc_seq_widget.set_running_state(True, f"Starting '{name}'…")
+        self._tc_seq_widget.set_running_state(True, f"Starting '{name}'…", name=name)
         if hasattr(self.window, 'seq_btn'):
             self.window.seq_btn.setText(name)
             color = "red" if repeat else "green"

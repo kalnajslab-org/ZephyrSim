@@ -167,6 +167,9 @@ class DiagnosticsWidget(QtWidgets.QWidget):
         self._latest.setText("")
         self._latest.setStyleSheet("")
         self._btn.setStyleSheet("")
+        if self._history.isVisible():
+            self._history.hide()
+            return
         self._history.show()
         self._history.raise_()
         self._history.activateWindow()
