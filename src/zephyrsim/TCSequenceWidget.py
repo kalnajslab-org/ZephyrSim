@@ -58,9 +58,9 @@ class TCSequenceWidget(QtWidgets.QWidget):
     under the active config set's TCSequences key.
     """
 
-    sequences_changed = QtCore.pyqtSignal(dict)       # any edit; caller persists
-    run_requested = QtCore.pyqtSignal(str, list, bool) # (name, steps, repeat)
-    stop_requested = QtCore.pyqtSignal()
+    sequences_changed = QtCore.pyqtSignal(dict)          # any edit; caller persists
+    command_requested = QtCore.pyqtSignal(str, str)      # (kind='mode'|'tc', text)
+    running_state_changed = QtCore.pyqtSignal(bool, str, bool)  # (running, name, repeat)
 
     def __init__(self, sequences: Optional[Dict[str, List[dict]]] = None, parent=None):
         super().__init__(parent)
@@ -68,7 +68,19 @@ class TCSequenceWidget(QtWidgets.QWidget):
         self._sequences: Dict[str, List[dict]] = dict(sequences or {})
         self._running_name: str = ""
         self._saving: bool = False
+        self._countdown_label: str = ""
+        self._wait_remaining: float = 0.0
+        self._steps: list = []
+        self._step_index: int = 0
+        self._repeat: bool = False
+        self._seq_name: str = ""
         self._build_ui()
+        self._countdown_timer = QtCore.QTimer(self)
+        self._countdown_timer.setInterval(1000)
+        self._countdown_timer.timeout.connect(self._countdown_tick)
+        self._step_timer = QtCore.QTimer(self)
+        self._step_timer.setSingleShot(True)
+        self._step_timer.timeout.connect(self._do_step)
         self._populate_combo()
 
     # ---- construction ----------------------------------------------------
@@ -282,10 +294,40 @@ class TCSequenceWidget(QtWidgets.QWidget):
         name = self._current_name()
         if not name or not self._sequences.get(name):
             return
-        self.run_requested.emit(name, list(self._sequences[name]), self._repeat_check.isChecked())
+        self._steps = list(self._sequences[name])
+        self._step_index = 0
+        self._repeat = self._repeat_check.isChecked()
+        self._seq_name = name
+        self.set_running_state(True, f"Starting '{name}'…", name=name)
+        self.running_state_changed.emit(True, name, self._repeat)
+        self._do_step()
 
     def _on_stop(self) -> None:
-        self.stop_requested.emit()
+        self.stop_countdown()
+        self._step_timer.stop()
+        self.set_running_state(False, "Stopped")
+        self.running_state_changed.emit(False, "", False)
+
+    def _do_step(self) -> None:
+        if self._step_index >= len(self._steps):
+            if self._repeat:
+                self._step_index = 0
+            else:
+                self.stop_countdown()
+                self.set_running_state(False, "Done")
+                self.running_state_changed.emit(False, "", False)
+                return
+        step = self._steps[self._step_index]
+        tc = step.get("tc", "").strip()
+        wait_s = step.get("wait_s", 0.0)
+        idx = self._step_index + 1
+        total = len(self._steps)
+        if tc:
+            kind = classify_command(tc)
+            self.command_requested.emit(kind, tc.upper() if kind == "mode" else tc)
+        self._step_index += 1
+        self.start_countdown(wait_s, f"[{idx}/{total}] {tc}")
+        self._step_timer.start(max(int(wait_s * 1000), 0))
 
     def set_running_state(self, running: bool, status: str = "", name: str = "") -> None:
         self._run_btn.setEnabled(not running)
@@ -303,6 +345,89 @@ class TCSequenceWidget(QtWidgets.QWidget):
             self._state_label.setStyleSheet("")
             self._running_name = ""
 
+    def start_countdown(self, wait_s: float, label: str) -> None:
+        self._countdown_label = label
+        self._wait_remaining = wait_s
+        self._refresh_countdown_status()
+        self._countdown_timer.start()
+
+    def stop_countdown(self) -> None:
+        self._countdown_timer.stop()
+
+    def _countdown_tick(self) -> None:
+        self._wait_remaining = max(0.0, self._wait_remaining - 1.0)
+        self._refresh_countdown_status()
+
+    def _refresh_countdown_status(self) -> None:
+        self._status_label.setText(
+            f"{self._countdown_label} — {format_duration(self._wait_remaining)}"
+        )
+
     def load_sequences(self, sequences: dict) -> None:
         self._sequences = dict(sequences or {})
         self._populate_combo()
+
+
+# ---------------------------------------------------------------------------
+# Standalone test harness
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    import sys
+
+    _TEST_SEQUENCES = {
+        "Checkout": [
+            {"tc": "SB",               "wait_s": 5.0},
+            {"tc": "FL",               "wait_s": 4.0},
+            {"tc": "1,4",              "wait_s": 8.0},
+            {"tc": "LP",               "wait_s": 5.0},
+        ],
+        "End of flight": [
+            {"tc": "SA",  "wait_s": 60.0},
+            {"tc": "EF",  "wait_s": 120.0},
+        ],
+    }
+
+    app = QtWidgets.QApplication(sys.argv)
+
+    # --- main window (stands in for ZephyrSimGUI's main window) ----------
+    main_win = QtWidgets.QMainWindow()
+    main_win.setWindowTitle("TCSequenceWidget — standalone test")
+    main_win.resize(700, 300)
+
+    log_edit = QtWidgets.QPlainTextEdit()
+    log_edit.setReadOnly(True)
+    main_win.setCentralWidget(log_edit)
+
+    # --- sequencer as a floating dock (same as ZephyrSim would do) -------
+    seq = TCSequenceWidget(sequences=_TEST_SEQUENCES)
+    dock = QtWidgets.QDockWidget("TC Sequences", main_win)
+    dock.setWidget(seq)
+    dock.setAllowedAreas(QtCore.Qt.DockWidgetArea.AllDockWidgetAreas)
+    main_win.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, dock)
+
+    main_win.show()
+
+    def _log(msg: str) -> None:
+        log_edit.appendPlainText(msg)
+
+    def _on_command(kind: str, text: str) -> None:
+        if kind == "mode":
+            _log(f"  SEND MODE : {text}")
+        else:
+            _log(f"  SEND TC   : {text};")
+
+    def _on_running_changed(running: bool, name: str, repeat: bool) -> None:
+        if running:
+            _log(f"─── starting '{name}'  repeat={repeat} ───")
+        else:
+            _log(f"─── {name or 'stopped/done'} ───")
+
+    seq.command_requested.connect(_on_command)
+    seq.running_state_changed.connect(_on_running_changed)
+    seq.sequences_changed.connect(
+        lambda d: _log(f"[saved] sequences: {list(d.keys())}")
+    )
+
+    seq.show()
+    sys.exit(app.exec())
