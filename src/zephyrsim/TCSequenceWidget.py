@@ -129,9 +129,14 @@ class TCSequenceWidget(QtWidgets.QWidget):
 
         # row management + run controls
         ctrl = QtWidgets.QHBoxLayout()
-        for label, slot in [("+ Row", self._on_add_row), ("- Row", self._on_del_row)]:
+        for label, tip, slot in [
+            ("↑ Row", "Insert row above selection", self._on_insert_above),
+            ("↓ Row", "Insert row below selection", self._on_insert_below),
+            ("- Row", "Delete selected row(s)",     self._on_del_row),
+        ]:
             btn = QtWidgets.QPushButton(label)
             btn.setMaximumWidth(55)
+            btn.setToolTip(tip)
             btn.clicked.connect(slot)
             ctrl.addWidget(btn)
         ctrl.addStretch(1)
@@ -229,7 +234,15 @@ class TCSequenceWidget(QtWidgets.QWidget):
                 return
         self._save_current()
 
-    def _on_add_row(self) -> None:
+    def _on_insert_above(self) -> None:
+        selected_rows = sorted({i.row() for i in self._table.selectedIndexes()})
+        at = selected_rows[0] if selected_rows else self._table.rowCount()
+        self._table.blockSignals(True)
+        self._insert_row("", 60, at=at)
+        self._table.blockSignals(False)
+        self._save_current()
+
+    def _on_insert_below(self) -> None:
         selected_rows = sorted({i.row() for i in self._table.selectedIndexes()})
         at = (selected_rows[-1] + 1) if selected_rows else self._table.rowCount()
         self._table.blockSignals(True)
