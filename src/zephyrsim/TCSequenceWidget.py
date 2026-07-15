@@ -9,14 +9,19 @@ from PyQt6 import QtCore, QtWidgets
 
 VALID_MODES = frozenset(["SB", "FL", "LP", "SA", "EF"])
 
+# Maps upper-cased input → canonical display form for Zephyr commands.
+ZEPHYR_CMD_CANONICAL: dict = {"SW": "SW", "SACK": "SAck", "RAACK": "RAAck", "TMACK": "TMAck"}
+
 
 def classify_command(text: str) -> str:
-    """Return 'mode', 'tc', or 'empty' for a sequencer command cell value."""
+    """Return 'mode', 'zephyr', 'tc', or 'empty' for a sequencer command cell value."""
     t = text.strip()
     if not t:
         return "empty"
     if t.upper() in VALID_MODES:
         return "mode"
+    if t.upper() in ZEPHYR_CMD_CANONICAL:
+        return "zephyr"
     return "tc"
 
 _DUR_RE = re.compile(r'^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$')
@@ -121,7 +126,7 @@ class TCSequenceWidget(QtWidgets.QWidget):
         root.addWidget(self._table)
 
         hint = QtWidgets.QLabel(
-            "Command: TC params (comma-separated), or mode: SB FL LP SA EF\n"
+            "Command: TC params (comma-separated), mode: SB FL LP SA EF, or Zephyr: SW SAck RAAck TMAck\n"
             "Wait: 30s · 2m30s · 1h20m · 5 (bare integer = minutes)"
         )
         hint.setStyleSheet("color: gray; font-size: 9pt;")
@@ -222,12 +227,18 @@ class TCSequenceWidget(QtWidgets.QWidget):
     def _on_table_edited(self, item: QtWidgets.QTableWidgetItem) -> None:
         if self._saving:
             return
-        if item.column() == 0 and classify_command(item.text()) == "mode":
-            upper = item.text().strip().upper()
-            if upper != item.text():
-                def _apply():
+        if item.column() == 0:
+            kind = classify_command(item.text())
+            if kind == "mode":
+                canonical = item.text().strip().upper()
+            elif kind == "zephyr":
+                canonical = ZEPHYR_CMD_CANONICAL.get(item.text().strip().upper(), item.text().strip())
+            else:
+                canonical = None
+            if canonical is not None and canonical != item.text():
+                def _apply(c=canonical):
                     self._saving = True
-                    item.setText(upper)
+                    item.setText(c)
                     self._saving = False
                     self._save_current()
                 QtCore.QTimer.singleShot(0, _apply)
@@ -337,7 +348,13 @@ class TCSequenceWidget(QtWidgets.QWidget):
         total = len(self._steps)
         if tc:
             kind = classify_command(tc)
-            self.command_requested.emit(kind, tc.upper() if kind == "mode" else tc)
+            if kind == "mode":
+                out = tc.upper()
+            elif kind == "zephyr":
+                out = ZEPHYR_CMD_CANONICAL.get(tc.upper(), tc)
+            else:
+                out = tc
+            self.command_requested.emit(kind, out)
         self._step_index += 1
         self.start_countdown(wait_s, f"[{idx}/{total}] {tc}")
         self._step_timer.start(max(int(wait_s * 1000), 0))
@@ -399,6 +416,12 @@ if __name__ == "__main__":
             {"tc": "SA",  "wait_s": 60.0},
             {"tc": "EF",  "wait_s": 120.0},
         ],
+        "Zephyr commands": [
+            {"tc": "SW",    "wait_s": 5.0},
+            {"tc": "SAck",  "wait_s": 5.0},
+            {"tc": "RAAck", "wait_s": 5.0},
+            {"tc": "TMAck", "wait_s": 5.0},
+        ],
     }
 
     app = QtWidgets.QApplication(sys.argv)
@@ -426,9 +449,11 @@ if __name__ == "__main__":
 
     def _on_command(kind: str, text: str) -> None:
         if kind == "mode":
-            _log(f"  SEND MODE : {text}")
+            _log(f"  SEND MODE   : {text}")
+        elif kind == "zephyr":
+            _log(f"  SEND ZEPHYR : {text}")
         else:
-            _log(f"  SEND TC   : {text};")
+            _log(f"  SEND TC     : {text};")
 
     def _on_running_changed(running: bool, name: str, repeat: bool) -> None:
         if running:

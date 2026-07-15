@@ -319,6 +319,19 @@ class ZephyrSimGUI:
             self.add_debug_msg(f"Seq mode: {text}")
             im_msg = ZephyrSimUtils.sendIM(self.instrument, text, self.cmd_filename, self.zephyr_port)
             self.add_msg_to_xml_queue(im_msg)
+        elif kind == "zephyr":
+            self.add_debug_msg(f"Seq Zephyr: {text}")
+            if text == "SW":
+                ZephyrSimUtils.sendSW(self.instrument, self.cmd_filename, self.zephyr_port)
+            elif text == "SAck":
+                msg = ZephyrSimUtils.sendSAck(self.instrument, "ACK", self.cmd_filename, self.zephyr_port)
+                self.add_msg_to_xml_queue(msg)
+            elif text == "RAAck":
+                msg = ZephyrSimUtils.sendRAAck(self.instrument, "ACK", self.cmd_filename, self.zephyr_port)
+                self.add_msg_to_xml_queue(msg)
+            elif text == "TMAck":
+                msg = ZephyrSimUtils.sendTMAck(self.instrument, "ACK", self.cmd_filename, self.zephyr_port)
+                self.add_msg_to_xml_queue(msg)
         else:
             tc_with_semi = text if text.endswith(";") else text + ";"
             self.add_debug_msg(f"Seq TC: {tc_with_semi}")
@@ -493,6 +506,10 @@ class ZephyrSimGUI:
             NormalizeMessageDisplayFilters(self.message_display_filters)
         )
         _save_settings(settings)
+
+def _get_active_gui() -> Optional["ZephyrSimGUI"]:
+    return ZephyrSimGUI.active_instance
+
 
 def PollWindowEvents() -> None:
     gui = _get_active_gui()
