@@ -123,6 +123,7 @@ class ConfigDialog(QtWidgets.QDialog):
         self.settings = _load_settings()
         self.selected_config = self.settings["-Main-"]["SelectedConfig"]
         self.result_config = None
+        self._active_config: str = self.selected_config
 
         self._build_ui()
         self._load_config_set(self.selected_config)
@@ -274,8 +275,9 @@ class ConfigDialog(QtWidgets.QDialog):
             return ""
         return selected_btn.text().strip()
 
-    def _save_current_widgets(self) -> None:
-        name = self.config_combo.currentText()
+    def _save_current_widgets(self, name: str = "") -> None:
+        if not name:
+            name = self.config_combo.currentText()
         if not name:
             return
         sec = self._config_section(name)
@@ -328,8 +330,13 @@ class ConfigDialog(QtWidgets.QDialog):
     def _on_config_changed(self, new_name: str) -> None:
         if not new_name:
             return
-        self._save_current_widgets()
+        # The combo has already changed to new_name when this fires, so save
+        # into the *previously* active config, not the new one.
+        self._save_current_widgets(self._active_config)
+        self._active_config = new_name
         self._load_config_set(new_name)
+        self.settings["-Main-"]["SelectedConfig"] = new_name
+        _save_settings(self.settings)
 
     def _select_data_dir(self) -> None:
         folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select the data directory", self.data_dir_edit.text() or os.path.expanduser("~"))
