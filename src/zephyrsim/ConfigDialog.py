@@ -97,7 +97,7 @@ def _bool_from_section(section: configparser.SectionProxy, key: str, default: bo
 
 def _list_ports() -> list:
     ports = [port.portName() for port in QtSerialPort.QSerialPortInfo.availablePorts()]
-    return [port for port in ports if "Bluetooth" not in port]
+    return [port for port in ports if "Bluetooth" not in port and "debug-console" not in port]
 
 
 def _open_serial_port(port_name: str, baud_rate: int = 115200) -> QtSerialPort.QSerialPort:
@@ -162,7 +162,7 @@ class ConfigDialog(QtWidgets.QDialog):
         self.window_size_combo.addItems(window_sizes)
         form.addRow("Window size:", self.window_size_combo)
 
-        self.auto_ack_checkbox = QtWidgets.QCheckBox("Automatically respond with ACKs")
+        self.auto_ack_checkbox = QtWidgets.QCheckBox("Automatically respond with ACKs (SAck, RAAck, TMAck)")
         self.auto_gps_checkbox = QtWidgets.QCheckBox("Automatically send GPS")
         self.corrupt_serial_checkbox = QtWidgets.QCheckBox("Simulate serial corruption (CRC testing)")
         form.addRow(self.auto_ack_checkbox)
@@ -200,7 +200,6 @@ class ConfigDialog(QtWidgets.QDialog):
 
         root.addLayout(form)
 
-        root.addWidget(QtWidgets.QLabel("Select the same Log and Zephyr ports when StratoCore<INST> uses shared ports."))
 
         btn_row = QtWidgets.QHBoxLayout()
         self.continue_btn = QtWidgets.QPushButton("Continue")
@@ -238,6 +237,7 @@ class ConfigDialog(QtWidgets.QDialog):
             radio = QtWidgets.QRadioButton(port_name)
             self.zephyr_port_button_group.addButton(radio)
             self.zephyr_port_group_layout.addWidget(radio)
+            radio.clicked.connect(lambda _, p=port_name: self._deselect_port_in_group(p, self.log_port_button_group))
             if port_name == selected_port:
                 radio.setChecked(True)
 
@@ -266,6 +266,7 @@ class ConfigDialog(QtWidgets.QDialog):
             radio = QtWidgets.QRadioButton(port_name)
             self.log_port_button_group.addButton(radio)
             self.log_port_group_layout.addWidget(radio)
+            radio.clicked.connect(lambda _, p=port_name: self._deselect_port_in_group(p, self.zephyr_port_button_group))
             if port_name == selected_port:
                 radio.setChecked(True)
 
@@ -274,6 +275,13 @@ class ConfigDialog(QtWidgets.QDialog):
         if selected_btn is None:
             return ""
         return selected_btn.text().strip()
+
+    def _deselect_port_in_group(self, port_name: str, group: QtWidgets.QButtonGroup) -> None:
+        for btn in group.buttons():
+            if btn.text() == port_name and btn.isChecked():
+                group.setExclusive(False)
+                btn.setChecked(False)
+                group.setExclusive(True)
 
     def _save_current_widgets(self, name: str = "") -> None:
         if not name:
@@ -410,21 +418,20 @@ class ConfigDialog(QtWidgets.QDialog):
             QtWidgets.QMessageBox.warning(self, "Error", "Please specify all items")
             return
 
+        if zephyr_port_name == log_port_name:
+            QtWidgets.QMessageBox.warning(self, "Error", "Log port and Zephyr port must be different")
+            return
+
         try:
             zephyr_baud = int(sec.get("ZephyrBaudRate", "115200"))
             zephyr = _open_serial_port(zephyr_port_name, zephyr_baud)
-            if log_port_name != zephyr_port_name:
+            try:
                 log = _open_serial_port(log_port_name)
-                shared_ports = False
-            else:
-                log = None
-                shared_ports = True
+            except Exception:
+                zephyr.close()
+                raise
         except Exception as exc:
             QtWidgets.QMessageBox.critical(self, "Error", f"Error opening serial port: {exc}")
-            try:
-                zephyr.close()
-            except Exception:
-                pass
             return
 
         msg_display_filters = NormalizeMessageDisplayFilters(sec.get("MessageDisplayFilters", "{}"))
@@ -444,7 +451,6 @@ class ConfigDialog(QtWidgets.QDialog):
         self.result_config = {
             "ZephyrPort": zephyr,
             "LogPort": log,
-            "SharedPorts": shared_ports,
             "Instrument": instrument_name,
             "AutoAck": _bool_from_section(sec, "AutoAck", True),
             "AutoGPS": _bool_from_section(sec, "AutoGPS", True),
@@ -458,3 +464,8 @@ class ConfigDialog(QtWidgets.QDialog):
         }
 
         self.accept()
+
+    def reject(self) -> None:
+        self._save_current_widgets()
+        _save_settings(self.settings)
+        super().reject()

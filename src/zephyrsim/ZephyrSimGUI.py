@@ -169,10 +169,7 @@ class ZephyrSimGUI:
         self.signal_bus.zephyr_message.connect(self.add_msg_to_zephyr_display)
         self.signal_bus.command_message.connect(self._handle_command_message)
 
-        if config["SharedPorts"]:
-            log_port_display_name = self.zephyr_port.portName()
-        else:
-            log_port_display_name = config["LogPort"].portName()
+        log_port_display_name = config["LogPort"].portName()
 
         self.window = MainWindowQt(
             config=config,
@@ -408,12 +405,12 @@ class ZephyrSimGUI:
     def serial_suspend(self) -> None:
         if not self.serial_suspended:
             self.zephyr_port.close()
-            if self.log_port and self.zephyr_port.portName() != self.log_port.portName():
+            if self.log_port:
                 self.log_port.close()
             self.serial_suspended = True
         else:
             self.zephyr_port.open(QtSerialPort.QSerialPort.OpenModeFlag.ReadWrite)
-            if self.log_port and self.zephyr_port.portName() != self.log_port.portName():
+            if self.log_port:
                 self.log_port.open(QtSerialPort.QSerialPort.OpenModeFlag.ReadWrite)
             self.serial_suspended = False
 

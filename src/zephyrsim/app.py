@@ -94,7 +94,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog='ZephyrSim_Simulator',
         description='Simulates the Zephyr communications with a StratoCore system.',
-        epilog='The Zephyr and Log ports may be separate or shared, depending on the StratoCore system configuration.')
+        epilog='The Zephyr and Log ports must be separate serial connections.')
     args = parser.parse_args()
     return args
 
@@ -144,7 +144,6 @@ def main() -> None:
         xml_filename=file_paths["xml_filename"],
         tm_dir=file_paths["tm_dir"],
         instrument=config['Instrument'],
-        shared_ports=config['SharedPorts'],
         corrupt_serial=config.get('CorruptSerial', False),
         parent=gui_manager.window)
 
