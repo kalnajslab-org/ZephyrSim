@@ -169,6 +169,17 @@ class ConfigDialog(QtWidgets.QDialog):
         form.addRow(self.auto_gps_checkbox)
         form.addRow(self.corrupt_serial_checkbox)
 
+        self.tc_history_size_spin = QtWidgets.QSpinBox()
+        self.tc_history_size_spin.setRange(0, 200)
+        self.tc_history_size_spin.setValue(10)
+        self.tc_history_size_spin.setFixedWidth(60)
+        self.clear_tc_history_checkbox = QtWidgets.QCheckBox("Clear TC history")
+        hist_row = QtWidgets.QHBoxLayout()
+        hist_row.addWidget(self.tc_history_size_spin)
+        hist_row.addWidget(self.clear_tc_history_checkbox)
+        hist_row.addStretch(1)
+        form.addRow("TC history size:", hist_row)
+
         data_dir_row = QtWidgets.QHBoxLayout()
         self.data_dir_edit = QtWidgets.QLineEdit()
         self.data_dir_edit.setMinimumWidth(520)
@@ -298,6 +309,7 @@ class ConfigDialog(QtWidgets.QDialog):
         sec["ZephyrPort"] = self._current_zephyr_port()
         sec["ZephyrBaudRate"] = self.zephyr_baud_combo.currentText()
         sec["LogPort"] = self._current_log_port()
+        sec["TCHistorySize"] = str(self.tc_history_size_spin.value())
         if "MessageDisplayFilters" not in sec:
             sec["MessageDisplayFilters"] = json.dumps({msg_type: True for msg_type in message_display_types})
 
@@ -315,6 +327,7 @@ class ConfigDialog(QtWidgets.QDialog):
         self.auto_ack_checkbox.setChecked(_bool_from_section(sec, "AutoAck", True))
         self.auto_gps_checkbox.setChecked(_bool_from_section(sec, "AutoGPS", True))
         self.corrupt_serial_checkbox.setChecked(_bool_from_section(sec, "CorruptSerial", False))
+        self.tc_history_size_spin.setValue(int(sec.get("TCHistorySize", "10")))
         self.data_dir_edit.setText(sec.get("DataDirectory", ""))
 
         baud_str = sec.get("ZephyrBaudRate", "115200")
@@ -448,6 +461,18 @@ class ConfigDialog(QtWidgets.QDialog):
         except Exception:
             tc_sequences = {}
 
+        tc_history_size = int(sec.get("TCHistorySize", "10"))
+        if self.clear_tc_history_checkbox.isChecked():
+            tc_history = []
+            sec["TCHistory"] = "[]"
+        else:
+            try:
+                tc_history = json.loads(sec.get("TCHistory", "[]"))
+                if not isinstance(tc_history, list):
+                    tc_history = []
+            except Exception:
+                tc_history = []
+
         self.result_config = {
             "ZephyrPort": zephyr,
             "LogPort": log,
@@ -461,6 +486,8 @@ class ConfigDialog(QtWidgets.QDialog):
             "ConfigSet": config_set,
             "MessageDisplayFilters": msg_display_filters,
             "TCSequences": tc_sequences,
+            "TCHistorySize": tc_history_size,
+            "TCHistory": tc_history,
         }
 
         self.accept()

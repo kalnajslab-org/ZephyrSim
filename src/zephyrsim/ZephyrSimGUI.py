@@ -52,6 +52,57 @@ MAX_LOG_BLOCKS = 500
 message_display_types = ["TM", "TC", "IM", "TMAck", "GPS", "TCAck", "IMAck", "IMR"]
 
 
+class _TCHistoryNav(QtCore.QObject):
+    """Shell-like Up/Down history navigation for an editable QComboBox.
+
+    Items are stored newest-first (index 0 = most recently sent).
+    Up moves toward older entries; Down moves back toward the present.
+    """
+
+    def __init__(self, combo: QtWidgets.QComboBox, parent=None):
+        super().__init__(parent)
+        self._combo = combo
+        self._saved_text: str = ""
+        combo.lineEdit().installEventFilter(self)
+
+    def add_entry(self, text: str, max_size: int) -> None:
+        if max_size == 0 or not text:
+            return
+        if self._combo.findText(text) >= 0:
+            return
+        self._combo.insertItem(0, text)
+        while self._combo.count() > max_size:
+            self._combo.removeItem(self._combo.count() - 1)
+        self._combo.setCurrentIndex(-1)
+        self._combo.clearEditText()
+
+    def history(self) -> list:
+        return [self._combo.itemText(i) for i in range(self._combo.count())]
+
+    def eventFilter(self, obj, event) -> bool:
+        if obj is not self._combo.lineEdit() or event.type() != QtCore.QEvent.Type.KeyPress:
+            return super().eventFilter(obj, event)
+        key = event.key()
+        n = self._combo.count()
+        idx = self._combo.currentIndex()
+        if key == QtCore.Qt.Key.Key_Up:
+            if idx == -1:
+                self._saved_text = self._combo.currentText()
+                if n > 0:
+                    self._combo.setCurrentIndex(0)
+            elif idx < n - 1:
+                self._combo.setCurrentIndex(idx + 1)
+            return True
+        if key == QtCore.Qt.Key.Key_Down:
+            if idx == 0:
+                self._combo.setCurrentIndex(-1)
+                self._combo.setEditText(self._saved_text)
+            elif idx > 0:
+                self._combo.setCurrentIndex(idx - 1)
+            return True
+        return super().eventFilter(obj, event)
+
+
 def _settings_path() -> str:
     return os.path.abspath(os.path.expanduser("~/ZephyrSim.ini"))
 
@@ -194,6 +245,11 @@ class ZephyrSimGUI:
             tc_sequence_widget=self._tc_seq_widget,
         )
         self.window.show()
+        for entry in config.get("TCHistory", []):
+            self.window.tc_input.addItem(entry)
+        self.window.tc_input.setCurrentIndex(-1)
+        self.window.tc_input.clearEditText()
+        self._tc_history_nav = _TCHistoryNav(self.window.tc_input, parent=self.window)
         self._tc_seq_widget.setParent(self.window)
         self._tc_seq_widget.setWindowFlags(QtCore.Qt.WindowType.Tool)
         self._tc_seq_widget.setAttribute(QtCore.Qt.WidgetAttribute.WA_ShowWithoutActivating)
@@ -291,7 +347,8 @@ class ZephyrSimGUI:
     def tc_message(self) -> None:
         if self.serial_suspended or self.window is None:
             return
-        tc_text = self.window.tc_input.text() + ";"
+        tc_raw = self.window.tc_input.currentText()
+        tc_text = tc_raw + ";"
         if tc_text == ";":
             QtWidgets.QMessageBox.warning(self.window, "Input Error", "TC text must not be empty")
             return
@@ -299,6 +356,8 @@ class ZephyrSimGUI:
         self.add_debug_msg(f"Sending TC: {tc_text}")
         msg = ZephyrSimUtils.sendTC(self.instrument, tc_text, self.cmd_filename, self.zephyr_port)
         self.add_msg_to_xml_queue(msg)
+        self._tc_history_nav.add_entry(tc_raw, int(self.config.get("TCHistorySize", 10)))
+        self._save_tc_history()
 
     def _save_sequences(self, sequences: dict) -> None:
         if not self.active_config_set:
@@ -307,6 +366,15 @@ class ZephyrSimGUI:
         if self.active_config_set not in settings:
             settings[self.active_config_set] = {}
         settings[self.active_config_set]["TCSequences"] = json.dumps(sequences)
+        _save_settings(settings)
+
+    def _save_tc_history(self) -> None:
+        if not self.active_config_set:
+            return
+        settings = _load_settings()
+        if self.active_config_set not in settings:
+            settings[self.active_config_set] = {}
+        settings[self.active_config_set]["TCHistory"] = json.dumps(self._tc_history_nav.history())
         _save_settings(settings)
 
     def _on_seq_command(self, kind: str, text: str) -> None:
