@@ -113,13 +113,15 @@ class TCSequenceWidget(QtWidgets.QWidget):
         name_row.addStretch(1)
         root.addLayout(name_row)
 
-        # sequence table: columns TC | Wait
-        self._table = QtWidgets.QTableWidget(0, 2)
-        self._table.setHorizontalHeaderLabels(["Command", "Wait"])
+        # sequence table: columns Command | Wait | Elapsed
+        self._table = QtWidgets.QTableWidget(0, 3)
+        self._table.setHorizontalHeaderLabels(["Command", "Wait", "Elapsed"])
         hh = self._table.horizontalHeader()
         hh.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
         hh.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Fixed)
+        hh.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.Fixed)
         self._table.setColumnWidth(1, 80)
+        self._table.setColumnWidth(2, 70)
         self._table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectItems)
         self._table.setFixedHeight(280)
         self._table.itemChanged.connect(self._on_table_edited)
@@ -188,12 +190,28 @@ class TCSequenceWidget(QtWidgets.QWidget):
             for step in self._sequences[name]:
                 self._insert_row(step.get("tc", ""), step.get("wait_s", 0.0))
         self._table.blockSignals(False)
+        self._update_elapsed_column()
+
+    def _update_elapsed_column(self) -> None:
+        cumulative = 0.0
+        for r in range(self._table.rowCount()):
+            wait_item = self._table.item(r, 1)
+            try:
+                cumulative += parse_duration(wait_item.text() if wait_item else "0s")
+            except ValueError:
+                pass
+            item = self._table.item(r, 2)
+            if item:
+                item.setText(format_duration(cumulative))
 
     def _insert_row(self, tc: str, wait_s: float, at: int = -1) -> None:
         r = at if at >= 0 else self._table.rowCount()
         self._table.insertRow(r)
         self._table.setItem(r, 0, QtWidgets.QTableWidgetItem(tc))
         self._table.setItem(r, 1, QtWidgets.QTableWidgetItem(format_duration(wait_s)))
+        elapsed_item = QtWidgets.QTableWidgetItem("")
+        elapsed_item.setFlags(QtCore.Qt.ItemFlag.ItemIsEnabled)
+        self._table.setItem(r, 2, elapsed_item)
 
     # ---- editing ---------------------------------------------------------
 
@@ -223,9 +241,10 @@ class TCSequenceWidget(QtWidgets.QWidget):
             self._saving = False
         self._sequences[name] = rows
         self.sequences_changed.emit(dict(self._sequences))
+        self._update_elapsed_column()
 
     def _on_table_edited(self, item: QtWidgets.QTableWidgetItem) -> None:
-        if self._saving:
+        if self._saving or item.column() == 2:
             return
         if item.column() == 0:
             kind = classify_command(item.text())
