@@ -159,14 +159,16 @@ def _set_text_color(button: QtWidgets.QPushButton, color: str) -> None:
 
 
 def _append_colored_text(edit: QtWidgets.QTextEdit, message: str, color_name: Optional[str]) -> None:
-    cursor = edit.textCursor()
+    sb = edit.verticalScrollBar()
+    at_bottom = sb.value() >= sb.maximum()
+    cursor = QtGui.QTextCursor(edit.document())
     cursor.movePosition(QtGui.QTextCursor.MoveOperation.End)
     fmt = QtGui.QTextCharFormat()
     if color_name:
         fmt.setForeground(QtGui.QBrush(QtGui.QColor(color_name)))
     cursor.insertText(message, fmt)
-    edit.setTextCursor(cursor)
-    edit.ensureCursorVisible()
+    if at_bottom:
+        sb.setValue(sb.maximum())
 
 
 def _formatted_timestamp() -> str:
