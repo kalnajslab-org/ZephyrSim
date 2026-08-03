@@ -4,7 +4,7 @@
 from typing import Callable, Dict, List, Optional, Tuple
 
 import pyperclip
-from PyQt6 import QtGui, QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 from . import ZephyrSimResources_rc  # noqa: F401
 from .DiagnosticsWidget import DiagnosticsWidget
 from . import __version__
@@ -150,6 +150,10 @@ class MainWindowQt(QtWidgets.QMainWindow):
         self.suspend_button.setToolTip("Suspend/Resume serial ports")
         _set_text_color(self.suspend_button, "darkorange")
         self.suspend_button.clicked.connect(self._toggle_suspend)
+        self._blink_on = False
+        self._blink_timer = QtCore.QTimer(self)
+        self._blink_timer.setInterval(500)
+        self._blink_timer.timeout.connect(self._do_blink)
         self.exit_button = QtWidgets.QPushButton("Exit")
         _set_text_color(self.exit_button, "red")
         self.exit_button.setToolTip("Exit the application")
@@ -236,10 +240,20 @@ class MainWindowQt(QtWidgets.QMainWindow):
         suspended = self.on_toggle_suspend()
         if suspended:
             self.suspend_button.setText("Resume")
-            _set_text_color(self.suspend_button, "royalblue")
+            self._blink_on = True
+            self._do_blink()
+            self._blink_timer.start()
         else:
+            self._blink_timer.stop()
             self.suspend_button.setText("Suspend")
             _set_text_color(self.suspend_button, "darkorange")
+
+    def _do_blink(self) -> None:
+        if self._blink_on:
+            self.suspend_button.setStyleSheet("QPushButton { color: white; background-color: royalblue; font-weight: bold; }")
+        else:
+            self.suspend_button.setStyleSheet("QPushButton { color: royalblue; background-color: transparent; font-weight: bold; }")
+        self._blink_on = not self._blink_on
 
     def _on_seq_btn_clicked(self) -> None:
         if self.tc_sequence_widget is None:
