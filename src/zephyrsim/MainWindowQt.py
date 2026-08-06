@@ -226,6 +226,10 @@ class MainWindowQt(QtWidgets.QMainWindow):
         _set_text_color(self.copy_tm_btn, "royalblue")
         self.copy_tm_btn.clicked.connect(self._copy_tm_directory)
         bottom_row.addWidget(self.copy_tm_btn)
+        self.open_tm_btn = QtWidgets.QPushButton("Open")
+        _set_text_color(self.open_tm_btn, "royalblue")
+        self.open_tm_btn.clicked.connect(self._open_tm_directory)
+        bottom_row.addWidget(self.open_tm_btn)
 
         root.addWidget(bottom_group)
 
@@ -271,6 +275,9 @@ class MainWindowQt(QtWidgets.QMainWindow):
 
     def _copy_tm_directory(self) -> None:
         pyperclip.copy(self.tm_directory.text())
+
+    def _open_tm_directory(self) -> None:
+        QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(self.tm_directory.text().strip()))
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         self.on_close_callback()
