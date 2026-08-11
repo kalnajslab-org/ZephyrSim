@@ -73,11 +73,146 @@ class SerialProcessor(QtCore.QObject):
         self._log_buffer = bytearray()
         self._framer = ZephyrFramer()
 
+        # Ports whose last observed state was faulted, so recurring health checks
+        # only report transitions rather than repeating every tick.
+        self._degraded: dict = {}
+        # Ports currently being closed/reopened -- see _on_port_error.
+        self._reopening: set = set()
+
         self.zephyr_port.clear(QtSerialPort.QSerialPort.Direction.Input)
         self.zephyr_port.readyRead.connect(self._on_zephyr_ready_read)
+        self.zephyr_port.errorOccurred.connect(
+            lambda err: self._on_port_error(self.zephyr_port, "Zephyr", err))
         if self.log_port is not None:
             self.log_port.clear(QtSerialPort.QSerialPort.Direction.Input)
             self.log_port.readyRead.connect(self._on_log_ready_read)
+            self.log_port.errorOccurred.connect(
+                lambda err: self._on_port_error(self.log_port, "Log", err))
+
+        # Backstop for the failure this was written to catch: a USB/driver
+        # transient can leave QSerialPort faulted so readyRead never fires again.
+        # errorOccurred should announce that, but if the signal is missed -- or
+        # the port goes quiet without one -- polling error()/isOpen() still finds
+        # it. Without either, the app stops receiving permanently and silently,
+        # while writes keep appearing to succeed.
+        self._health_timer = QtCore.QTimer(self)
+        self._health_timer.setInterval(self._HEALTH_CHECK_MS)
+        self._health_timer.timeout.connect(self._check_port_health)
+        self._health_timer.start()
+
+    # -- serial port fault handling / recovery ------------------------------
+    #
+    # QSerialPort reports faults through errorOccurred, and once a port is in an
+    # error state (classically ResourceError, raised when the device is removed
+    # or a USB transient hits) it stops emitting readyRead entirely. Nothing
+    # recovers on its own: reads stop forever while write() continues to queue
+    # normally, so the application looks healthy while receiving nothing. These
+    # handlers surface the fault and reopen the port.
+
+    _HEALTH_CHECK_MS = 5000
+
+    @staticmethod
+    def _fatal_errors() -> frozenset:
+        """SerialPortError values that justify closing and reopening the port.
+
+        Built defensively: enum membership varies slightly across Qt versions,
+        so unknown names are skipped rather than raising at import time.
+        """
+        enum = QtSerialPort.QSerialPort.SerialPortError
+        names = ("ResourceError", "ReadError", "WriteError", "PermissionError",
+                 "DeviceNotFoundError", "UnknownError", "NotOpenError")
+        return frozenset(getattr(enum, n) for n in names if hasattr(enum, n))
+
+    def _port_of(self, label: str):
+        return self.zephyr_port if label == "Zephyr" else self.log_port
+
+    def _on_port_error(self, port, label: str, error) -> None:
+        """Slot: report a serial error and reopen the port when recoverable."""
+        if error == QtSerialPort.QSerialPort.SerialPortError.NoError:
+            return
+
+        # Ignore errors raised by our own close/open churn. clearError(), close()
+        # and a failed open() all emit errorOccurred, so without this guard a
+        # port that cannot be reopened (unplugged cable) recurses until the stack
+        # blows -- a far worse failure than the silent one this code exists to fix.
+        if label in self._reopening:
+            return
+
+        name = getattr(error, "name", str(error))
+        detail = f"{label} port ({port.portName()}): {name} -- {port.errorString()}"
+
+        if error in self._fatal_errors():
+            # Report the transition only; the health timer keeps retrying quietly
+            # so a long unplug doesn't flood the diagnostics panel.
+            if not self._degraded.get(label):
+                self.signals.diagnostics_message.emit(
+                    ERROR, f"{label} serial port error", detail + "\nAttempting to reopen...")
+                self._degraded[label] = True
+            self._reopen(label)
+        else:
+            self.signals.diagnostics_message.emit(WARNING, f"{label} serial port error", detail)
+
+    def _reopen(self, label: str) -> bool:
+        """Close, clear, and reopen a faulted port. Returns True on success.
+
+        Also resets the receive-side state: a partial frame buffered before the
+        fault would otherwise prepend garbage to the first message after
+        recovery, turning a clean reconnect into a framing error.
+        """
+        port = self._port_of(label)
+        if port is None or label in self._reopening:
+            return False
+
+        self._reopening.add(label)
+        try:
+            port.clearError()
+            if port.isOpen():
+                port.close()
+
+            if not port.open(QtSerialPort.QSerialPort.OpenModeFlag.ReadWrite):
+                return False
+
+            port.clear(QtSerialPort.QSerialPort.Direction.Input)
+            if label == "Zephyr":
+                self._framer = ZephyrFramer()
+            else:
+                self._log_buffer.clear()
+
+            self._degraded[label] = False
+            self.signals.diagnostics_message.emit(
+                WARNING, f"{label} serial port reopened",
+                f"{label} port ({port.portName()}) recovered; receive buffer reset.")
+            return True
+        finally:
+            self._reopening.discard(label)
+
+    def _check_port_health(self) -> None:
+        """Periodic poll: catch a faulted or closed port and try to recover it."""
+        for label in ("Zephyr", "Log"):
+            port = self._port_of(label)
+            if port is None:
+                continue
+
+            faulted = (not port.isOpen()
+                       or port.error() != QtSerialPort.QSerialPort.SerialPortError.NoError)
+            if not faulted:
+                self._degraded[label] = False
+                continue
+
+            # Already reported and still broken: keep retrying quietly so a
+            # long unplug doesn't flood the diagnostics panel.
+            if self._degraded.get(label):
+                self._reopen(label)
+                continue
+
+            name = getattr(port.error(), "name", str(port.error()))
+            self.signals.diagnostics_message.emit(
+                ERROR, f"{label} serial port unusable",
+                f"{label} port ({port.portName()}) is "
+                f"{'closed' if not port.isOpen() else name}: {port.errorString()}\n"
+                "Receiving has stopped; attempting to reopen...")
+            self._degraded[label] = True
+            self._reopen(label)
 
     def _emit_log_message(self, message: str) -> None:
         """Timestamp, emit, and persist one plain-text instrument log line."""
