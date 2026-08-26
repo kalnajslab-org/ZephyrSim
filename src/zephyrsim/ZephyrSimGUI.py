@@ -222,7 +222,8 @@ class ZephyrSimGUI:
         self.signal_bus.zephyr_message.connect(self.add_msg_to_zephyr_display)
         self.signal_bus.command_message.connect(self._handle_command_message)
 
-        log_port_display_name = config["LogPort"].portName()
+        log_port = config["LogPort"]
+        log_port_display_name = log_port.portName() if log_port is not None else "None (log port disabled)"
 
         self.window = MainWindowQt(
             config=config,

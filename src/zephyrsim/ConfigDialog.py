@@ -204,6 +204,13 @@ class ConfigDialog(QtWidgets.QDialog):
 
         self.log_port_group_box = QtWidgets.QGroupBox("Log port")
         self.log_port_group_layout = QtWidgets.QVBoxLayout(self.log_port_group_box)
+        self.no_log_port_checkbox = QtWidgets.QCheckBox("No log port (run without a log port device)")
+        self.no_log_port_checkbox.toggled.connect(self._on_no_log_port_toggled)
+        self.log_port_group_layout.addWidget(self.no_log_port_checkbox)
+        self.log_port_radio_container = QtWidgets.QWidget()
+        self.log_port_radio_layout = QtWidgets.QVBoxLayout(self.log_port_radio_container)
+        self.log_port_radio_layout.setContentsMargins(0, 0, 0, 0)
+        self.log_port_group_layout.addWidget(self.log_port_radio_container)
         self.log_port_button_group = QtWidgets.QButtonGroup(self)
         self.log_port_button_group.setExclusive(True)
         self._set_log_port_options(ports, "")
@@ -259,8 +266,8 @@ class ConfigDialog(QtWidgets.QDialog):
         return selected_btn.text().strip()
 
     def _set_log_port_options(self, ports: list, selected: str) -> None:
-        while self.log_port_group_layout.count():
-            item = self.log_port_group_layout.takeAt(0)
+        while self.log_port_radio_layout.count():
+            item = self.log_port_radio_layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
                 if isinstance(widget, QtWidgets.QAbstractButton):
@@ -269,14 +276,14 @@ class ConfigDialog(QtWidgets.QDialog):
 
         if not ports:
             no_ports_label = QtWidgets.QLabel("No serial ports found")
-            self.log_port_group_layout.addWidget(no_ports_label)
+            self.log_port_radio_layout.addWidget(no_ports_label)
             return
 
         selected_port = selected if selected in ports else ports[0]
         for port_name in ports:
             radio = QtWidgets.QRadioButton(port_name)
             self.log_port_button_group.addButton(radio)
-            self.log_port_group_layout.addWidget(radio)
+            self.log_port_radio_layout.addWidget(radio)
             radio.clicked.connect(lambda _, p=port_name: self._deselect_port_in_group(p, self.zephyr_port_button_group))
             if port_name == selected_port:
                 radio.setChecked(True)
@@ -286,6 +293,9 @@ class ConfigDialog(QtWidgets.QDialog):
         if selected_btn is None:
             return ""
         return selected_btn.text().strip()
+
+    def _on_no_log_port_toggled(self, checked: bool) -> None:
+        self.log_port_radio_container.setEnabled(not checked)
 
     def _deselect_port_in_group(self, port_name: str, group: QtWidgets.QButtonGroup) -> None:
         for btn in group.buttons():
@@ -309,6 +319,7 @@ class ConfigDialog(QtWidgets.QDialog):
         sec["ZephyrPort"] = self._current_zephyr_port()
         sec["ZephyrBaudRate"] = self.zephyr_baud_combo.currentText()
         sec["LogPort"] = self._current_log_port()
+        sec["NoLogPort"] = str(self.no_log_port_checkbox.isChecked())
         sec["TCHistorySize"] = str(self.tc_history_size_spin.value())
         if "MessageDisplayFilters" not in sec:
             sec["MessageDisplayFilters"] = json.dumps({msg_type: True for msg_type in message_display_types})
@@ -347,6 +358,10 @@ class ConfigDialog(QtWidgets.QDialog):
         if log_name and log_name not in log_ports:
             log_ports.append(log_name)
         self._set_log_port_options(log_ports, log_name)
+
+        no_log_port = _bool_from_section(sec, "NoLogPort", False)
+        self.no_log_port_checkbox.setChecked(no_log_port)
+        self.log_port_radio_container.setEnabled(not no_log_port)
 
     def _on_config_changed(self, new_name: str) -> None:
         if not new_name:
@@ -421,28 +436,34 @@ class ConfigDialog(QtWidgets.QDialog):
         config_set = self.config_combo.currentText().strip()
         sec = self._config_section(config_set)
 
+        no_log_port = self.no_log_port_checkbox.isChecked()
         data_directory = sec.get("DataDirectory", "").strip()
         zephyr_port_name = sec.get("ZephyrPort", "").strip()
         log_port_name = sec.get("LogPort", "").strip()
         instrument_name = sec.get("Instrument", "").strip()
         window_size = sec.get("WindowSize", "Medium")
 
-        if not all([data_directory, zephyr_port_name, log_port_name, instrument_name, window_size]):
+        required = [data_directory, zephyr_port_name, instrument_name, window_size]
+        if not no_log_port:
+            required.append(log_port_name)
+        if not all(required):
             QtWidgets.QMessageBox.warning(self, "Error", "Please specify all items")
             return
 
-        if zephyr_port_name == log_port_name:
+        if not no_log_port and zephyr_port_name == log_port_name:
             QtWidgets.QMessageBox.warning(self, "Error", "Log port and Zephyr port must be different")
             return
 
         try:
             zephyr_baud = int(sec.get("ZephyrBaudRate", "115200"))
             zephyr = _open_serial_port(zephyr_port_name, zephyr_baud)
-            try:
-                log = _open_serial_port(log_port_name)
-            except Exception:
-                zephyr.close()
-                raise
+            log = None
+            if not no_log_port:
+                try:
+                    log = _open_serial_port(log_port_name)
+                except Exception:
+                    zephyr.close()
+                    raise
         except Exception as exc:
             QtWidgets.QMessageBox.critical(self, "Error", f"Error opening serial port: {exc}")
             return
