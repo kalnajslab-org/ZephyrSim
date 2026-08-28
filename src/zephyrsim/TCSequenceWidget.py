@@ -105,9 +105,14 @@ class TCSequenceWidget(QtWidgets.QWidget):
         self._name_combo.setMinimumWidth(120)
         self._name_combo.currentIndexChanged.connect(self._load_current)
         name_row.addWidget(self._name_combo)
-        for label, slot in [("New", self._on_new), ("Rename", self._on_rename), ("Delete", self._on_delete)]:
+        for label, slot in [
+            ("New", self._on_new),
+            ("Duplicate", self._on_duplicate),
+            ("Rename", self._on_rename),
+            ("Delete", self._on_delete),
+        ]:
             btn = QtWidgets.QPushButton(label)
-            btn.setMaximumWidth(60)
+            btn.setMaximumWidth(80 if label == "Duplicate" else 60)
             btn.clicked.connect(slot)
             name_row.addWidget(btn)
         name_row.addStretch(1)
@@ -300,6 +305,21 @@ class TCSequenceWidget(QtWidgets.QWidget):
             QtWidgets.QMessageBox.warning(self, "Exists", f"'{name}' already exists.")
             return
         self._sequences[name] = []
+        self._populate_combo()
+        self._name_combo.setCurrentText(name)
+        self.sequences_changed.emit(dict(self._sequences))
+
+    def _on_duplicate(self) -> None:
+        old = self._current_name()
+        if not old:
+            return
+        base = f"{old} copy"
+        name = base
+        n = 2
+        while name in self._sequences:
+            name = f"{base} {n}"
+            n += 1
+        self._sequences[name] = [dict(step) for step in self._sequences[old]]
         self._populate_combo()
         self._name_combo.setCurrentText(name)
         self.sequences_changed.emit(dict(self._sequences))
