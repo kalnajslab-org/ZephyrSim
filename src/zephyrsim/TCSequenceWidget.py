@@ -153,6 +153,7 @@ class TCSequenceWidget(QtWidgets.QWidget):
             ctrl.addWidget(btn)
         ctrl.addStretch(1)
         self._repeat_check = QtWidgets.QCheckBox("Repeat")
+        self._repeat_check.toggled.connect(self._on_repeat_toggled)
         ctrl.addWidget(self._repeat_check)
         self._run_btn = QtWidgets.QPushButton("Run")
         self._run_btn.setMaximumWidth(50)
@@ -364,6 +365,11 @@ class TCSequenceWidget(QtWidgets.QWidget):
         self.set_running_state(True, f"Starting '{name}'…", name=name)
         self.running_state_changed.emit(True, name, self._repeat)
         self._do_step()
+
+    def _on_repeat_toggled(self, checked: bool) -> None:
+        self._repeat = checked
+        if self._stop_btn.isEnabled():
+            self.running_state_changed.emit(True, self._running_name, self._repeat)
 
     def _on_stop(self) -> None:
         self.stop_countdown()
