@@ -16,7 +16,7 @@ Command line usage:
 import sys
 import xml.etree.ElementTree as ET #import XML library
 from xml.dom import minidom
-from datetime import datetime
+from datetime import datetime, timezone
 from time import sleep
 from PyQt6 import QtSerialPort
 
@@ -101,10 +101,10 @@ def sendGPS(zenith: float, filename: str, port: QtSerialPort.QSerialPort) -> str
     msg_id_num += 1
 
     date = ET.SubElement(XML_GPS,'Date')
-    date.text = datetime.today().strftime('%Y/%m/%d')
+    date.text = datetime.now(timezone.utc).strftime('%Y/%m/%d')
 
     time = ET.SubElement(XML_GPS,'Time')
-    time.text = datetime.today().strftime('%H:%M:%S')
+    time.text = datetime.now(timezone.utc).strftime('%H:%M:%S')
     #time.text = '11:59:00'
 
     lon = ET.SubElement(XML_GPS,'Lon')
