@@ -164,6 +164,7 @@ def _append_colored_text(edit: QtWidgets.QTextEdit, message: str, color_name: Op
     cursor = QtGui.QTextCursor(edit.document())
     cursor.movePosition(QtGui.QTextCursor.MoveOperation.End)
     fmt = QtGui.QTextCharFormat()
+    fmt.setFont(edit.font())
     if color_name:
         fmt.setForeground(QtGui.QBrush(QtGui.QColor(color_name)))
     cursor.insertText(message, fmt)
@@ -321,7 +322,9 @@ class ZephyrSimGUI:
         if not self.should_display_message(message):
             return
 
-        if "(TO)" in message:
+        if "--- ZephyrSim" in message:
+            _append_colored_text(self.window.zephyr_window, message, "red")
+        elif "(TO)" in message:
             _append_colored_text(self.window.zephyr_window, message, "blue")
         elif "TM" in message and "CRIT" in message:
             _append_colored_text(self.window.zephyr_window, message, "red")
@@ -479,11 +482,13 @@ class ZephyrSimGUI:
             if self.log_port:
                 self.log_port.close()
             self.serial_suspended = True
+            self.emit_zephyr_message(f"{_formatted_timestamp()}--- ZephyrSim Suspended ---\n")
         else:
             self.zephyr_port.open(QtSerialPort.QSerialPort.OpenModeFlag.ReadWrite)
             if self.log_port:
                 self.log_port.open(QtSerialPort.QSerialPort.OpenModeFlag.ReadWrite)
             self.serial_suspended = False
+            self.emit_zephyr_message(f"{_formatted_timestamp()}--- ZephyrSim Resumed ---\n")
 
     def add_msg_to_xml_queue(self, msg: str) -> None:
         if msg is None:
