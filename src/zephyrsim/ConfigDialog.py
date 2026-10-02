@@ -497,6 +497,7 @@ class ConfigDialog(QtWidgets.QDialog):
         self.result_config = {
             "ZephyrPort": zephyr,
             "LogPort": log,
+            "LogPortName": log_port_name,
             "Instrument": instrument_name,
             "AutoAck": _bool_from_section(sec, "AutoAck", True),
             "AutoGPS": _bool_from_section(sec, "AutoGPS", True),

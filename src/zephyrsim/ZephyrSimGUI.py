@@ -224,8 +224,18 @@ class ZephyrSimGUI:
         self.signal_bus.command_message.connect(self._handle_command_message)
 
         log_port = config["LogPort"]
-        log_port_display_name = log_port.portName() if log_port is not None else "None (log port disabled)"
-        log_port_path = QtSerialPort.QSerialPortInfo(log_port).systemLocation() if log_port is not None else ""
+        if log_port is not None:
+            log_port_display_name = log_port.portName()
+            log_port_path = QtSerialPort.QSerialPortInfo(log_port).systemLocation()
+        else:
+            # Log port is disabled, but still show the configured one so it can be copied for use elsewhere.
+            configured_name = config.get("LogPortName", "")
+            if configured_name:
+                log_port_display_name = f"{configured_name} (not in use)"
+                log_port_path = QtSerialPort.QSerialPortInfo(configured_name).systemLocation() or configured_name
+            else:
+                log_port_display_name = "None (log port disabled)"
+                log_port_path = ""
         zephyr_port_path = QtSerialPort.QSerialPortInfo(self.zephyr_port).systemLocation()
 
         self.window = MainWindowQt(
