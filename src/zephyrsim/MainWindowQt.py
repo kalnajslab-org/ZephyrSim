@@ -17,6 +17,42 @@ def _set_text_color(button: QtWidgets.QPushButton, color: str, checked_color: st
     button.setStyleSheet(style)
 
 
+def _make_copy_button(tooltip: str, on_click: Callable[[], None]) -> QtWidgets.QToolButton:
+    """Icon-only copy button; the SVG resource is tinted with the palette's button text color."""
+    button = QtWidgets.QToolButton()
+    color = button.palette().color(QtGui.QPalette.ColorRole.ButtonText)
+    source = QtGui.QIcon(":/icons/copy.svg")
+    icon = QtGui.QIcon()
+    for size in (16, 32):
+        pm = source.pixmap(size, size)
+        p = QtGui.QPainter(pm)
+        p.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_SourceIn)
+        p.fillRect(pm.rect(), color)
+        p.end()
+        icon.addPixmap(pm)
+    button.setIcon(icon)
+    button.setToolTip(tooltip)
+    button.clicked.connect(lambda _checked=False: on_click())
+    return button
+
+
+def _make_info_box(caption: str, value: str, button: Optional[QtWidgets.QWidget] = None) -> QtWidgets.QFrame:
+    """Framed "caption: value [button]" box that adds no title strip (unlike a titled QGroupBox)."""
+    box = QtWidgets.QFrame()
+    box.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
+    layout = QtWidgets.QHBoxLayout(box)
+    layout.setContentsMargins(8, 2, 8, 2)
+    caption_label = QtWidgets.QLabel(f"{caption}:")
+    font = caption_label.font()
+    font.setBold(True)
+    caption_label.setFont(font)
+    layout.addWidget(caption_label)
+    layout.addWidget(QtWidgets.QLabel(value))
+    if button is not None:
+        layout.addWidget(button)
+    return box
+
+
 class MainWindowQt(QtWidgets.QMainWindow):
     def __init__(
         self,
@@ -39,6 +75,8 @@ class MainWindowQt(QtWidgets.QMainWindow):
         on_close: Callable[[], None],
         log_port_display_name: str,
         zephyr_port_display_name: str,
+        log_port_path: str,
+        zephyr_port_path: str,
         tc_sequence_widget: Optional[QtWidgets.QWidget] = None,
     ):
         super().__init__()
@@ -61,6 +99,8 @@ class MainWindowQt(QtWidgets.QMainWindow):
         self.on_close_callback = on_close
         self.log_port_display_name = log_port_display_name
         self.zephyr_port_display_name = zephyr_port_display_name
+        self.log_port_path = log_port_path
+        self.zephyr_port_path = zephyr_port_path
         self.tc_sequence_widget = tc_sequence_widget
 
         self.display_buttons = {}
@@ -203,9 +243,15 @@ class MainWindowQt(QtWidgets.QMainWindow):
         root.addLayout(output_row, 1)
 
         config_row = QtWidgets.QHBoxLayout()
-        config_row.addWidget(QtWidgets.QLabel(f"Configuration set: {cfg['ConfigSet']}"))
-        config_row.addWidget(QtWidgets.QLabel(f"Log port: {self.log_port_display_name}"))
-        config_row.addWidget(QtWidgets.QLabel(f"Zephyr port: {self.zephyr_port_display_name}"))
+        config_row.addWidget(_make_info_box("Configuration set", str(cfg["ConfigSet"])))
+        for label, name, path in (
+            ("Log port", self.log_port_display_name, self.log_port_path),
+            ("Zephyr port", self.zephyr_port_display_name, self.zephyr_port_path),
+        ):
+            copy_button = _make_copy_button(
+                f"Copy {label.lower()} path to clipboard", lambda p=path or name: pyperclip.copy(p)
+            )
+            config_row.addWidget(_make_info_box(label, name, copy_button))
         config_row.addWidget(QtWidgets.QLabel(f"AutoAck: {cfg['AutoAck']}"))
         config_row.addWidget(QtWidgets.QLabel(f"AutoGPS: {cfg['AutoGPS']}"))
         config_row.addStretch(1)
@@ -222,9 +268,7 @@ class MainWindowQt(QtWidgets.QMainWindow):
         self.tm_directory = QtWidgets.QLineEdit(" ")
         self.tm_directory.setReadOnly(True)
         bottom_row.addWidget(self.tm_directory, 2)
-        self.copy_tm_btn = QtWidgets.QPushButton("Copy")
-        _set_text_color(self.copy_tm_btn, "royalblue")
-        self.copy_tm_btn.clicked.connect(self._copy_tm_directory)
+        self.copy_tm_btn = _make_copy_button("Copy TM directory to clipboard", self._copy_tm_directory)
         bottom_row.addWidget(self.copy_tm_btn)
         self.open_tm_btn = QtWidgets.QPushButton("Open")
         _set_text_color(self.open_tm_btn, "royalblue")

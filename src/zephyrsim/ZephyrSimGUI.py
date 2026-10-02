@@ -225,6 +225,8 @@ class ZephyrSimGUI:
 
         log_port = config["LogPort"]
         log_port_display_name = log_port.portName() if log_port is not None else "None (log port disabled)"
+        log_port_path = QtSerialPort.QSerialPortInfo(log_port).systemLocation() if log_port is not None else ""
+        zephyr_port_path = QtSerialPort.QSerialPortInfo(self.zephyr_port).systemLocation()
 
         self.window = MainWindowQt(
             config=config,
@@ -246,6 +248,8 @@ class ZephyrSimGUI:
             on_close=self._on_window_close,
             log_port_display_name=log_port_display_name,
             zephyr_port_display_name=self.zephyr_port.portName(),
+            log_port_path=log_port_path,
+            zephyr_port_path=zephyr_port_path,
             tc_sequence_widget=self._tc_seq_widget,
         )
         self.window.show()
